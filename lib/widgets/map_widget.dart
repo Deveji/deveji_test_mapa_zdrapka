@@ -38,6 +38,18 @@ class _MapWidgetState extends State<MapWidget> {
               userAgentPackageName: 'com.deveji.test.mapazdrapka',
               tileProvider: CancellableNetworkTileProvider(),
             ),
+            OverlayImageLayer(
+              overlayImages: [
+                OverlayImage(
+                  bounds: LatLngBounds(
+                    LatLng(northEast.latitude, northEast.longitude + 0.3),
+                    LatLng(southWest.latitude - (northEast.latitude - southWest.latitude) * 0.6, southWest.longitude),
+                  ),
+                  opacity: 0.8,
+                  imageProvider: const AssetImage('lib/widgets/poland.webp'),
+                ),
+              ],
+            ),
             // Gray overlay for the rest of the world
             PolygonLayer(
               polygons: [
@@ -54,7 +66,7 @@ class _MapWidgetState extends State<MapWidget> {
                 ),
               ],
             ),
-            // Blue overlay for Poland
+            // Brown overlay for Poland
             PolygonLayer(
               polygons: [
                 Polygon(
