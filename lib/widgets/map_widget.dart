@@ -19,6 +19,8 @@ class _MapWidgetState extends State<MapWidget> {
   late Future<LatLng> centerPoint;
   late Future<LatLngBounds> mapBounds;
   String loadingStatus = 'Initializing...';
+  bool isImageVisible = true;
+  final currentZoom = ValueNotifier<double>(5.75); // Initial zoom level
 
   // Image position adjustment variables
   double top = 0.3;
@@ -30,6 +32,12 @@ class _MapWidgetState extends State<MapWidget> {
   void initState() {
     super.initState();
     _initializeGeoData();
+  }
+
+  @override
+  void dispose() {
+    currentZoom.dispose();
+    super.dispose();
   }
 
   void _initializeGeoData() {
@@ -118,7 +126,12 @@ class _MapWidgetState extends State<MapWidget> {
                 initialCenter: center,
                 initialZoom: 5.75,
                 minZoom: 5.6,
-                maxZoom: 30,
+                maxZoom: 11,
+                onMapEvent: (MapEvent event) {
+                  if (event is MapEventMove) {
+                    currentZoom.value = event.camera.zoom;
+                  }
+                },
                 cameraConstraint: CameraConstraint.containCenter(
                   bounds: bounds,
                 ),
@@ -132,18 +145,19 @@ class _MapWidgetState extends State<MapWidget> {
                 //   userAgentPackageName: 'com.deveji.test.mapazdrapka',
                 //   tileProvider: CancellableNetworkTileProvider(),
                 // ),
-                OverlayImageLayer(
-                  overlayImages: [
-                    OverlayImage(
-                      bounds: LatLngBounds(
-                        LatLng(bounds.northEast.latitude + top, bounds.northEast.longitude + right),
-                        LatLng(bounds.southWest.latitude - bottom, bounds.southWest.longitude - left),
+                if (isImageVisible)
+                  OverlayImageLayer(
+                    overlayImages: [
+                      OverlayImage(
+                        bounds: LatLngBounds(
+                          LatLng(bounds.northEast.latitude + top, bounds.northEast.longitude + right),
+                          LatLng(bounds.southWest.latitude - bottom, bounds.southWest.longitude - left),
+                        ),
+                        opacity: 0.8,
+                        imageProvider: const AssetImage('lib/widgets/poland.webp'),
                       ),
-                      opacity: 0.8,
-                      imageProvider: const AssetImage('lib/widgets/poland.webp'),
-                    ),
-                  ],
-                ),
+                    ],
+                  ),
                 // Gray overlay for the rest of the world
                 PolygonLayer(
                   polygons: [
@@ -166,7 +180,7 @@ class _MapWidgetState extends State<MapWidget> {
                     points: points,
                     isFilled: true,
                     color: Colors.grey.withOpacity(0.3),
-                    borderStrokeWidth: 1.0,
+                    borderStrokeWidth: 1.5,
                     borderColor: const Color.fromRGBO(77, 63, 50, 0.5),
                   )).toList(),
                 ),
@@ -189,13 +203,67 @@ class _MapWidgetState extends State<MapWidget> {
               child: FloatingActionButton(
                 onPressed: () {
                   mapController.move(center, 5.75);
+                  currentZoom.value = 5.75;
                 },
                 child: const Icon(Icons.center_focus_strong),
+              ),
+            ),
+            // Zoom level display
+            Positioned(
+              left: 16,
+              bottom: 16,
+              child: ValueListenableBuilder<double>(
+                valueListenable: currentZoom,
+                builder: (context, zoom, _) {
+                  return ZoomDisplay(zoom: zoom);
+                },
+              ),
+            ),
+            Positioned(
+              left: 16,
+              top: 16,
+              child: FloatingActionButton(
+                onPressed: () {
+                  setState(() {
+                    isImageVisible = !isImageVisible;
+                  });
+                },
+                child: Icon(isImageVisible ? Icons.visibility_off : Icons.visibility),
               ),
             ),
           ],
         );
       },
+    );
+  }
+}
+
+class ZoomDisplay extends StatelessWidget {
+  final double zoom;
+
+  const ZoomDisplay({super.key, required this.zoom});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(4),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 4,
+          ),
+        ],
+      ),
+      child: Text(
+        'Zoom: ${zoom.toStringAsFixed(2)}',
+        style: const TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
     );
   }
 }
