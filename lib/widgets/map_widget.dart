@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_map_cancellable_tile_provider/flutter_map_cancellable_tile_provider.dart';
 import 'package:latlong2/latlong.dart';
+import 'dart:math' as math;
 import '../services/geojson_service.dart';
 
 class MapWidget extends StatefulWidget {
@@ -11,11 +12,73 @@ class MapWidget extends StatefulWidget {
   State<MapWidget> createState() => _MapWidgetState();
 }
 
+class VoivodeshipLabelPainter extends CustomPainter {
+  final List<VoivodeshipData> voivodeships;
+  final MapController mapController;
+
+  VoivodeshipLabelPainter({
+    required this.voivodeships,
+    required this.mapController,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    for (var voivodeship in voivodeships) {
+      final center = _calculatePolygonCenter(voivodeship.points);
+      final screenPoint = mapController.camera.latLngToScreenPoint(center);
+      
+      if (screenPoint != null) {
+        final textSpan = TextSpan(
+          text: voivodeship.name,
+          style: const TextStyle(
+            color: Color.fromRGBO(77, 63, 50, 1.0),
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+          ),
+        );
+        
+        final textPainter = TextPainter(
+          text: textSpan,
+          textAlign: TextAlign.center,
+          textDirection: TextDirection.ltr,
+        );
+
+        textPainter.layout();
+        
+        final offset = Offset(
+          screenPoint.x - (textPainter.width / 2),
+          screenPoint.y - (textPainter.height / 2),
+        );
+        
+        textPainter.paint(canvas, offset);
+      }
+    }
+  }
+
+  LatLng _calculatePolygonCenter(List<LatLng> points) {
+    double totalLat = 0;
+    double totalLng = 0;
+    
+    for (var point in points) {
+      totalLat += point.latitude;
+      totalLng += point.longitude;
+    }
+    
+    return LatLng(
+      totalLat / points.length,
+      totalLng / points.length,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+}
 class _MapWidgetState extends State<MapWidget> {
   final mapController = MapController();
   final geoJsonService = GeoJsonService();
   late Future<List<LatLng>> polandBorder;
   late Future<List<List<LatLng>>> countyPolygons;
+  late Future<List<VoivodeshipData>> voivodeshipData;
   late Future<LatLng> centerPoint;
   late Future<LatLngBounds> mapBounds;
   String loadingStatus = 'Initializing...';
@@ -54,6 +117,12 @@ class _MapWidgetState extends State<MapWidget> {
         throw e;
       });
 
+      setState(() => loadingStatus = 'Loading voivodeships...');
+      voivodeshipData = geoJsonService.extractVoivodeshipPolygons().catchError((e) {
+        print('Error loading voivodeships: $e');
+        throw e;
+      });
+
       setState(() => loadingStatus = 'Calculating map center...');
       centerPoint = polandBorder.then((points) {
         return geoJsonService.calculateCenter(points);
@@ -83,6 +152,7 @@ class _MapWidgetState extends State<MapWidget> {
       future: Future.wait([
         polandBorder,
         countyPolygons,
+        voivodeshipData,
         centerPoint,
         mapBounds,
       ]),
@@ -115,8 +185,9 @@ class _MapWidgetState extends State<MapWidget> {
         print('All data loaded successfully');
         final borderPoints = snapshot.data![0] as List<LatLng>;
         final counties = snapshot.data![1] as List<List<LatLng>>;
-        final center = snapshot.data![2] as LatLng;
-        final bounds = snapshot.data![3] as LatLngBounds;
+        final voivodeships = snapshot.data![2] as List<VoivodeshipData>;
+        final center = snapshot.data![3] as LatLng;
+        final bounds = snapshot.data![4] as LatLngBounds;
 
         return Stack(
           children: [
@@ -174,15 +245,28 @@ class _MapWidgetState extends State<MapWidget> {
                     ),
                   ],
                 ),
-                // Counties overlay
+                // Voivodeships overlay
                 PolygonLayer(
-                  polygons: counties.map((points) => Polygon(
-                    points: points,
+                  polygons: voivodeships.map((data) => Polygon(
+                    points: data.points,
                     isFilled: true,
                     color: Colors.grey.withOpacity(0.3),
-                    borderStrokeWidth: 1.5,
-                    borderColor: const Color.fromRGBO(77, 63, 50, 0.5),
+                    borderStrokeWidth: 2.0,
+                    borderColor: const Color.fromRGBO(77, 63, 50, 0.7),
                   )).toList(),
+                ),
+                // Voivodeship labels
+                ValueListenableBuilder<double>(
+                  valueListenable: currentZoom,
+                  builder: (context, zoom, _) {
+                    return zoom >= 6.5 ? CustomPaint(
+                      size: Size(MediaQuery.of(context).size.width, MediaQuery.of(context).size.height),
+                      painter: VoivodeshipLabelPainter(
+                        voivodeships: voivodeships,
+                        mapController: mapController,
+                      ),
+                    ) : const SizedBox.shrink();
+                  },
                 ),
                 // Brown overlay for Poland border
                 PolygonLayer(

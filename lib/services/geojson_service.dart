@@ -4,11 +4,19 @@ import 'package:flutter/services.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:flutter_map/flutter_map.dart';
 
+class VoivodeshipData {
+  final List<LatLng> points;
+  final String name;
+
+  VoivodeshipData({required this.points, required this.name});
+}
+
 class GeoJsonService {
   static final GeoJsonService _instance = GeoJsonService._internal();
   factory GeoJsonService() => _instance;
   GeoJsonService._internal();
 
+  // Poland border polygon
   Future<List<LatLng>> extractPolygonPoints() async {
     try {
       debugPrint('Loading poland.geo.json...');
@@ -47,6 +55,7 @@ class GeoJsonService {
     }
   }
 
+  // County polygons
   Future<List<List<LatLng>>> extractCountyPolygons() async {
     try {
       debugPrint('Loading poland.counties.json...');
@@ -89,6 +98,66 @@ class GeoJsonService {
       return validPolygons;
     } catch (e, stackTrace) {
       debugPrint('Error in extractCountyPolygons: $e');
+      debugPrint(stackTrace.toString());
+      rethrow;
+    }
+  }
+
+  // Voivodeship polygons
+  Future<List<VoivodeshipData>> extractVoivodeshipPolygons() async {
+    try {
+      debugPrint('Loading poland.voivodeships.json...');
+      final String jsonString = await rootBundle.loadString('lib/constants/poland.voivodeships.json');
+      debugPrint('Parsing poland.voivodeships.json...');
+      final Map<String, dynamic> geoJson = json.decode(jsonString);
+      
+      if (geoJson['type'] != 'FeatureCollection') {
+        throw Exception('Invalid GeoJSON type: ${geoJson['type']}');
+      }
+      
+      final features = geoJson['features'] as List<dynamic>;
+      final voivodeshipData = <VoivodeshipData>[];
+
+      for (var i = 0; i < features.length; i++) {
+        try {
+          final feature = features[i] as Map<String, dynamic>;
+          final geometry = feature['geometry'] as Map<String, dynamic>;
+          final properties = feature['properties'] as Map<String, dynamic>;
+          final name = properties['name'] as String;
+          
+          if (geometry['type'] == 'Polygon') {
+            final coordinates = geometry['coordinates'] as List<dynamic>;
+            final outerRing = coordinates.first as List<dynamic>;
+            voivodeshipData.add(
+              VoivodeshipData(
+                points: _convertCoordinatesToLatLng(outerRing),
+                name: name,
+              ),
+            );
+          } else if (geometry['type'] == 'MultiPolygon') {
+            final polygons = geometry['coordinates'] as List<dynamic>;
+            for (var polygon in polygons) {
+              final outerRing = (polygon as List<dynamic>).first as List<dynamic>;
+              voivodeshipData.add(
+                VoivodeshipData(
+                  points: _convertCoordinatesToLatLng(outerRing),
+                  name: name,
+                ),
+              );
+            }
+          } else {
+            debugPrint('Unknown geometry type at index $i: ${geometry['type']}');
+          }
+        } catch (e) {
+          debugPrint('Error processing voivodeship at index $i: $e');
+          // Continue processing other voivodeships
+        }
+      }
+
+      debugPrint('Successfully extracted ${voivodeshipData.length} voivodeship polygons with names');
+      return voivodeshipData;
+    } catch (e, stackTrace) {
+      debugPrint('Error in extractVoivodeshipPolygons: $e');
       debugPrint(stackTrace.toString());
       rethrow;
     }
