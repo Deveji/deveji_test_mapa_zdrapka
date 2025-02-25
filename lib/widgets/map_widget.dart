@@ -33,12 +33,6 @@ class _MapWidgetState extends State<MapWidget> {
         print('Error loading Poland border: $e');
         throw e;
       });
-      
-      setState(() => loadingStatus = 'Loading county polygons...');
-      countyPolygons = geoJsonService.extractCountyPolygons().catchError((e) {
-        print('Error loading counties: $e');
-        throw e;
-      });
 
       print('All data loading initialized');
     } catch (e) {
@@ -82,7 +76,6 @@ class _MapWidgetState extends State<MapWidget> {
 
         print('All data loaded successfully');
         final borderPoints = snapshot.data![0] as List<LatLng>;
-        final counties = snapshot.data![1] as List<List<LatLng>>;
 
         return Stack(
           children: [
@@ -135,16 +128,6 @@ class _MapWidgetState extends State<MapWidget> {
                 //       isFilled: true,
                 //     ),
                 //   ],
-                // ),
-                // Counties overlay
-                // PolygonLayer(
-                //   polygons: counties.map((points) => Polygon(
-                //     points: points,
-                //     isFilled: true,
-                //     color: Colors.grey.withOpacity(0.3),
-                //     borderStrokeWidth: 1.0,
-                //     borderColor: const Color.fromRGBO(77, 63, 50, 0.5),
-                //   )).toList(),
                 // ),
                 // Brown overlay for Poland border
                 PolygonLayer(

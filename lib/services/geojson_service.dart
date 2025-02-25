@@ -47,60 +47,6 @@ class GeoJsonService {
     }
   }
 
-  Future<List<List<LatLng>>> extractCountyPolygons() async {
-    try {
-      debugPrint('Loading poland.counties.json...');
-      final String jsonString = await rootBundle.loadString('lib/constants/poland.counties.json');
-      debugPrint('Parsing poland.counties.json...');
-      final Map<String, dynamic> geoJson = json.decode(jsonString);
-      
-      if (geoJson['type'] != 'FeatureCollection') {
-        throw Exception('Invalid GeoJSON type: ${geoJson['type']}');
-      }
-      
-      final features = geoJson['features'] as List<dynamic>;
-      final validPolygons = <List<LatLng>>[];
-
-      for (var i = 0; i < features.length; i++) {
-        try {
-          final feature = features[i] as Map<String, dynamic>;
-          final geometry = feature['geometry'] as Map<String, dynamic>;
-          
-          if (geometry['type'] == 'Polygon') {
-            final coordinates = geometry['coordinates'] as List<dynamic>;
-            final outerRing = coordinates.first as List<dynamic>;
-            validPolygons.add(_convertCoordinatesToLatLng(outerRing));
-          } else if (geometry['type'] == 'MultiPolygon') {
-            final polygons = geometry['coordinates'] as List<dynamic>;
-            for (var polygon in polygons) {
-              final outerRing = (polygon as List<dynamic>).first as List<dynamic>;
-              validPolygons.add(_convertCoordinatesToLatLng(outerRing));
-            }
-          } else {
-            debugPrint('Unknown geometry type at index $i: ${geometry['type']}');
-          }
-        } catch (e) {
-          debugPrint('Error processing county at index $i: $e');
-          // Continue processing other counties
-        }
-      }
-
-      debugPrint('Successfully extracted ${validPolygons.length} county polygons');
-      return validPolygons;
-    } catch (e, stackTrace) {
-      debugPrint('Error in extractCountyPolygons: $e');
-      debugPrint(stackTrace.toString());
-      rethrow;
-    }
-  }
-
-  List<LatLng> _convertCoordinatesToLatLng(List<dynamic> coordinates) {
-    return coordinates.map<LatLng>((coord) {
-      final point = coord as List<dynamic>;
-      return LatLng(point[1] as double, point[0] as double);
-    }).toList();
-  }
-
   LatLngBounds calculateBounds(List<LatLng> points) {
     if (points.isEmpty) {
       throw Exception('Cannot calculate bounds: empty points list');
