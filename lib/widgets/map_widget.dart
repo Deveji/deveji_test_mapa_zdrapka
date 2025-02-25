@@ -1,69 +1,9 @@
 import 'package:flutter/material.dart';
-import 'dart:ui' as ui;
-import 'dart:async';
-import 'package:flutter/services.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_map_cancellable_tile_provider/flutter_map_cancellable_tile_provider.dart';
 import 'package:latlong2/latlong.dart';
 import 'dart:math';
 import '../services/geojson_service.dart';
-
-// Performance metrics singleton
-class PerformanceMetrics {
-  static final PerformanceMetrics _instance = PerformanceMetrics._internal();
-  factory PerformanceMetrics() => _instance;
-  PerformanceMetrics._internal();
-
-  int? imageLoadStartTime;
-  int? imageLoadEndTime;
-  int? renderStartTime;
-  int? renderEndTime;
-
-  void reset() {
-    imageLoadStartTime = null;
-    imageLoadEndTime = null;
-    renderStartTime = null;
-    renderEndTime = null;
-  }
-
-  String getImageLoadTime() {
-    if (imageLoadStartTime == null || imageLoadEndTime == null) return 'N/A';
-    return '${(imageLoadEndTime! - imageLoadStartTime!) / 1000} seconds';
-  }
-
-  String getRenderTime() {
-    if (renderStartTime == null || renderEndTime == null) return 'N/A';
-    return '${(renderEndTime! - renderStartTime!) / 1000} seconds';
-  }
-}
-
-class CachedImageProvider extends ImageProvider<CachedImageProvider> {
-  final ui.Image image;
-
-  const CachedImageProvider(this.image);
-
-  @override
-  Future<CachedImageProvider> obtainKey(ImageConfiguration configuration) {
-    return SynchronousFuture<CachedImageProvider>(this);
-  }
-
-  @override
-  ImageStreamCompleter loadImage(CachedImageProvider key, ImageDecoderCallback decode) {
-    return OneFrameImageStreamCompleter(
-      SynchronousFuture<ImageInfo>(ImageInfo(image: image)),
-    );
-  }
-
-  @override
-  bool operator ==(Object other) {
-    if (other.runtimeType != runtimeType) return false;
-    return other is CachedImageProvider && other.image == image;
-  }
-
-  @override
-  int get hashCode => image.hashCode;
-}
 
 class MapWidget extends StatefulWidget {
   const MapWidget({super.key});
@@ -131,10 +71,7 @@ class VoivodeshipLabelPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant VoivodeshipLabelPainter oldDelegate) {
-    return oldDelegate.voivodeships != voivodeships ||
-           oldDelegate.mapController.camera != mapController.camera;
-  }
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }
 
 class _MapWidgetState extends State<MapWidget> with WidgetsBindingObserver {
@@ -233,43 +170,14 @@ class _MapWidgetState extends State<MapWidget> with WidgetsBindingObserver {
   double left = 0.2;
   double right = 0.8;
 
-  Future<void> _precacheOverlayImage() async {
-    if (cachedImage != null) return;
-
-    performanceMetrics.imageLoadStartTime = DateTime.now().millisecondsSinceEpoch;
-    
-    // Load the asset bytes
-    final ByteData data = await rootBundle.load('lib/widgets/poland.webp');
-    final Uint8List bytes = data.buffer.asUint8List();
-    
-    // Decode the image
-    final codec = await ui.instantiateImageCodec(bytes);
-    final frame = await codec.getNextFrame();
-    cachedImage = frame.image;
-    
-    performanceMetrics.imageLoadEndTime = DateTime.now().millisecondsSinceEpoch;
-    setState(() {}); // Trigger rebuild with cached image
-  }
-
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
     _initializeGeoData();
-    _precacheOverlayImage();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      // Reset metrics when app comes to foreground
-      performanceMetrics.reset();
-    }
   }
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
     currentZoom.dispose();
     super.dispose();
   }
@@ -383,34 +291,17 @@ class _MapWidgetState extends State<MapWidget> with WidgetsBindingObserver {
               ),
               children: [
                 if (isImageVisible)
-                  Builder(
-                    builder: (context) {
-                      performanceMetrics.renderStartTime = DateTime.now().millisecondsSinceEpoch;
-                      
-                      if (cachedImage == null) {
-                        return const SizedBox.shrink();
-                      }
-
-                      final overlay = OverlayImageLayer(
-                        overlayImages: [
-                          OverlayImage(
-                            bounds: LatLngBounds(
-                              LatLng(bounds.northEast.latitude + top, bounds.northEast.longitude + right),
-                              LatLng(bounds.southWest.latitude - bottom, bounds.southWest.longitude - left),
-                            ),
-                            opacity: 0.8,
-                            imageProvider: ResizeImage(
-                              CachedImageProvider(cachedImage!),
-                              width: cachedImage!.width,
-                              height: cachedImage!.height,
-                            ),
-                          ),
-                        ],
-                      );
-
-                      performanceMetrics.renderEndTime = DateTime.now().millisecondsSinceEpoch;
-                      return overlay;
-                    },
+                  OverlayImageLayer(
+                    overlayImages: [
+                      OverlayImage(
+                        bounds: LatLngBounds(
+                          LatLng(bounds.northEast.latitude + top, bounds.northEast.longitude + right),
+                          LatLng(bounds.southWest.latitude - bottom, bounds.southWest.longitude - left),
+                        ),
+                        opacity: 0.8,
+                        imageProvider: const AssetImage('lib/widgets/poland.webp'),
+                      ),
+                    ],
                   ),
                 // Gray overlay for the rest of the world
                 PolygonLayer(
@@ -531,33 +422,6 @@ class _MapWidgetState extends State<MapWidget> with WidgetsBindingObserver {
                 },
               ),
             ),
-            // Performance metrics display
-            Positioned(
-              right: 16,
-              top: 16,
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(8),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.1),
-                      blurRadius: 4,
-                    ),
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text('Load: ${performanceMetrics.getImageLoadTime()}'),
-                    const SizedBox(height: 4),
-                    Text('Render: ${performanceMetrics.getRenderTime()}'),
-                  ],
-                ),
-              ),
-            ),
-            // Image visibility toggle
             Positioned(
               left: 16,
               top: 16,
