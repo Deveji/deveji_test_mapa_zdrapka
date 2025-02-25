@@ -127,25 +127,4 @@ class GeoJsonService {
     );
   }
 
-  LatLng calculateCenter(List<LatLng> points) {
-    if (points.isEmpty) {
-      throw Exception('Cannot calculate center: empty points list');
-    }
-
-    double sumLat = 0;
-    double sumLng = 0;
-    
-    for (var point in points) {
-      sumLat += point.latitude;
-      sumLng += point.longitude;
-    }
-
-    final center = LatLng(
-      sumLat / points.length,
-      sumLng / points.length,
-    );
-
-    debugPrint('Calculated center: (${center.latitude.toStringAsFixed(6)}, ${center.longitude.toStringAsFixed(6)})');
-    return center;
-  }
 }

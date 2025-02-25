@@ -3,6 +3,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_map_cancellable_tile_provider/flutter_map_cancellable_tile_provider.dart';
 import 'package:latlong2/latlong.dart';
 import '../services/geojson_service.dart';
+import '../constants/poland_coordinates.dart';
 
 class MapWidget extends StatefulWidget {
   const MapWidget({super.key});
@@ -16,15 +17,8 @@ class _MapWidgetState extends State<MapWidget> {
   final geoJsonService = GeoJsonService();
   late Future<List<LatLng>> polandBorder;
   late Future<List<List<LatLng>>> countyPolygons;
-  late Future<LatLng> centerPoint;
-  late Future<LatLngBounds> mapBounds;
   String loadingStatus = 'Initializing...';
-
-  // Image position adjustment variables
-  double top = 0.3;
-  double bottom = 3.8;
-  double left = 0.2;
-  double right = 0.8;
+  final centerPoint = polandCenter;
 
   @override
   void initState() {
@@ -46,22 +40,6 @@ class _MapWidgetState extends State<MapWidget> {
         throw e;
       });
 
-      setState(() => loadingStatus = 'Calculating map center...');
-      centerPoint = polandBorder.then((points) {
-        return geoJsonService.calculateCenter(points);
-      }).catchError((e) {
-        print('Error calculating center: $e');
-        throw e;
-      });
-
-      setState(() => loadingStatus = 'Calculating map bounds...');
-      mapBounds = polandBorder.then((points) {
-        return geoJsonService.calculateBounds(points);
-      }).catchError((e) {
-        print('Error calculating bounds: $e');
-        throw e;
-      });
-
       print('All data loading initialized');
     } catch (e) {
       print('Error initializing geo data: $e');
@@ -75,8 +53,6 @@ class _MapWidgetState extends State<MapWidget> {
       future: Future.wait([
         polandBorder,
         countyPolygons,
-        centerPoint,
-        mapBounds,
       ]),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -107,20 +83,18 @@ class _MapWidgetState extends State<MapWidget> {
         print('All data loaded successfully');
         final borderPoints = snapshot.data![0] as List<LatLng>;
         final counties = snapshot.data![1] as List<List<LatLng>>;
-        final center = snapshot.data![2] as LatLng;
-        final bounds = snapshot.data![3] as LatLngBounds;
 
         return Stack(
           children: [
             FlutterMap(
               mapController: mapController,
               options: MapOptions(
-                initialCenter: center,
+                initialCenter: centerPoint,
                 initialZoom: 5.75,
                 minZoom: 5.6,
                 maxZoom: 30,
                 cameraConstraint: CameraConstraint.containCenter(
-                  bounds: bounds,
+                  bounds: polandBounds,
                 ),
                 interactionOptions: const InteractionOptions(
                   flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
@@ -128,7 +102,7 @@ class _MapWidgetState extends State<MapWidget> {
               ),
               children: [
                 // TileLayer(
-                //   urlTemplate: 'https://api.maptiler.com/maps/aquarelle/{z}/{x}/{y}.png?key=RYwixx4ca4fsMuVl1xme',
+                //   urlTemplate: 'https://api.maptiler.com/maps/toner-v2/{z}/{x}/{y}.png?key=RYwixx4ca4fsMuVl1xme',
                 //   userAgentPackageName: 'com.deveji.test.mapazdrapka',
                 //   tileProvider: CancellableNetworkTileProvider(),
                 // ),
@@ -136,40 +110,42 @@ class _MapWidgetState extends State<MapWidget> {
                   overlayImages: [
                     OverlayImage(
                       bounds: LatLngBounds(
-                        LatLng(bounds.northEast.latitude + top, bounds.northEast.longitude + right),
-                        LatLng(bounds.southWest.latitude - bottom, bounds.southWest.longitude - left),
+                        LatLng(polandBounds.northEast.latitude + imageAdjustment.top, 
+                              polandBounds.northEast.longitude + imageAdjustment.right),
+                        LatLng(polandBounds.southWest.latitude - imageAdjustment.bottom, 
+                              polandBounds.southWest.longitude - imageAdjustment.left),
                       ),
-                      opacity: 0.8,
+                      opacity: 1,
                       imageProvider: const AssetImage('lib/widgets/poland.webp'),
                     ),
                   ],
                 ),
                 // Gray overlay for the rest of the world
-                PolygonLayer(
-                  polygons: [
-                    Polygon(
-                      points: const [
-                        LatLng(85, -180),  // Top-left of the world
-                        LatLng(85, 180),   // Top-right of the world
-                        LatLng(-85, 180),  // Bottom-right of the world
-                        LatLng(-85, -180), // Bottom-left of the world
-                      ],
-                      color: const Color.fromRGBO(208, 194, 183, 1.0),
-                      holePointsList: [borderPoints],
-                      isFilled: true,
-                    ),
-                  ],
-                ),
+                // PolygonLayer(
+                //   polygons: [
+                //     Polygon(
+                //       points: const [
+                //         LatLng(85, -180),  // Top-left of the world
+                //         LatLng(85, 180),   // Top-right of the world
+                //         LatLng(-85, 180),  // Bottom-right of the world
+                //         LatLng(-85, -180), // Bottom-left of the world
+                //       ],
+                //       color: const Color.fromRGBO(208, 194, 183, 1.0),
+                //       holePointsList: [borderPoints],
+                //       isFilled: true,
+                //     ),
+                //   ],
+                // ),
                 // Counties overlay
-                PolygonLayer(
-                  polygons: counties.map((points) => Polygon(
-                    points: points,
-                    isFilled: true,
-                    color: Colors.grey.withOpacity(0.3),
-                    borderStrokeWidth: 1.0,
-                    borderColor: const Color.fromRGBO(77, 63, 50, 0.5),
-                  )).toList(),
-                ),
+                // PolygonLayer(
+                //   polygons: counties.map((points) => Polygon(
+                //     points: points,
+                //     isFilled: true,
+                //     color: Colors.grey.withOpacity(0.3),
+                //     borderStrokeWidth: 1.0,
+                //     borderColor: const Color.fromRGBO(77, 63, 50, 0.5),
+                //   )).toList(),
+                // ),
                 // Brown overlay for Poland border
                 PolygonLayer(
                   polygons: [
@@ -188,7 +164,7 @@ class _MapWidgetState extends State<MapWidget> {
               bottom: 16,
               child: FloatingActionButton(
                 onPressed: () {
-                  mapController.move(center, 5.75);
+                  mapController.move(centerPoint, 5.75);
                 },
                 child: const Icon(Icons.center_focus_strong),
               ),
