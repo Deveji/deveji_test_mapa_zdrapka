@@ -6,7 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_map_cancellable_tile_provider/flutter_map_cancellable_tile_provider.dart';
 import 'package:latlong2/latlong.dart';
-import 'dart:math' as math;
+import 'dart:math';
 import '../services/geojson_service.dart';
 
 // Performance metrics singleton
@@ -136,8 +136,84 @@ class VoivodeshipLabelPainter extends CustomPainter {
            oldDelegate.mapController.camera != mapController.camera;
   }
 }
+
 class _MapWidgetState extends State<MapWidget> with WidgetsBindingObserver {
-  // Static cache for the decoded image
+  Color _getVoivodeshipColor(VoivodeshipData voivodeship) {
+    if (voivodeship == selectedVoivodeship) {
+      return Colors.blue.withOpacity(0.6);
+    }
+    if (voivodeship == hoveredVoivodeship) {
+      return Colors.lightBlue.withOpacity(0.4);
+    }
+    return Colors.grey.withOpacity(0.8);
+  }
+
+  Color _getVoivodeshipBorderColor(VoivodeshipData voivodeship) {
+    if (voivodeship == selectedVoivodeship || voivodeship == hoveredVoivodeship) {
+      return Colors.blue;
+    }
+    return const Color.fromRGBO(77, 63, 50, 0.7);
+  }
+
+  void _showVoivodeshipInfo(VoivodeshipData voivodeship) {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (BuildContext context) {
+        return Container(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                voivodeship.name,
+                style: const TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text('Selected voivodeship: ${voivodeship.name}'),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: () {
+                    setState(() => selectedVoivodeship = null);
+                    Navigator.pop(context);
+                  },
+                  child: const Text('Close'),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // Point in polygon check using ray casting algorithm
+  bool _isPointInPolygon(LatLng point, List<LatLng> polygonPoints) {
+    var inside = false;
+    var j = polygonPoints.length - 1;
+    
+    for (var i = 0; i < polygonPoints.length; i++) {
+      if (((polygonPoints[i].latitude > point.latitude) != 
+           (polygonPoints[j].latitude > point.latitude)) &&
+          (point.longitude < (polygonPoints[j].longitude - polygonPoints[i].longitude) * 
+           (point.latitude - polygonPoints[i].latitude) / 
+           (polygonPoints[j].latitude - polygonPoints[i].latitude) + 
+           polygonPoints[i].longitude)) {
+        inside = !inside;
+      }
+      j = i;
+    }
+    
+    return inside;
+  }
+
+  VoivodeshipData? hoveredVoivodeship;
+  VoivodeshipData? selectedVoivodeship;
   static ui.Image? cachedImage;
   final performanceMetrics = PerformanceMetrics();
   final mapController = MapController();
@@ -306,11 +382,6 @@ class _MapWidgetState extends State<MapWidget> with WidgetsBindingObserver {
                 ),
               ),
               children: [
-                // TileLayer(
-                //   urlTemplate: 'https://api.maptiler.com/maps/aquarelle/{z}/{x}/{y}.png?key=RYwixx4ca4fsMuVl1xme',
-                //   userAgentPackageName: 'com.deveji.test.mapazdrapka',
-                //   tileProvider: CancellableNetworkTileProvider(),
-                // ),
                 if (isImageVisible)
                   Builder(
                     builder: (context) {
@@ -362,10 +433,55 @@ class _MapWidgetState extends State<MapWidget> with WidgetsBindingObserver {
                   polygons: voivodeships.map((data) => Polygon(
                     points: data.points,
                     isFilled: true,
-                    color: Colors.grey.withOpacity(0.8),
+                    color: _getVoivodeshipColor(data),
                     borderStrokeWidth: 2.0,
-                    borderColor: const Color.fromRGBO(77, 63, 50, 0.7),
+                    borderColor: _getVoivodeshipBorderColor(data),
                   )).toList(),
+                ),
+                // Hit testing layer
+                MouseRegion(
+                  hitTestBehavior: HitTestBehavior.translucent,
+                  onHover: (event) {
+                    final point = mapController.camera.pointToLatLng(
+                      Point(event.localPosition.dx, event.localPosition.dy)
+                    );
+                    if (point == null) return;
+
+                    VoivodeshipData? hitVoivodeship;
+                    for (var voivodeship in voivodeships) {
+                      if (_isPointInPolygon(point, voivodeship.points)) {
+                        hitVoivodeship = voivodeship;
+                        break;
+                      }
+                    }
+
+                    if (hitVoivodeship != hoveredVoivodeship) {
+                      setState(() => hoveredVoivodeship = hitVoivodeship);
+                    }
+                  },
+                  onExit: (_) {
+                    if (hoveredVoivodeship != null) {
+                      setState(() => hoveredVoivodeship = null);
+                    }
+                  },
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.translucent,
+                    onTapUp: (details) {
+                      final point = mapController.camera.pointToLatLng(
+                        Point(details.localPosition.dx, details.localPosition.dy)
+                      );
+                      if (point == null) return;
+
+                      for (var voivodeship in voivodeships) {
+                        if (_isPointInPolygon(point, voivodeship.points)) {
+                          setState(() => selectedVoivodeship = voivodeship);
+                          _showVoivodeshipInfo(voivodeship);
+                          break;
+                        }
+                      }
+                    },
+                    child: Container(color: Colors.transparent),
+                  ),
                 ),
                 // Voivodeship labels
                 ValueListenableBuilder<double>(
