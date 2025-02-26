@@ -38,6 +38,8 @@ dependencies:
   latlong2: ^0.9.0
   flutter_map_cancellable_tile_provider: ^2.0.0
   geojson_vi: ^2.2.5
+  cached_network_image: ^3.3.1
+  flutter_cache_manager: ^3.3.1
 
 dev_dependencies:
   flutter_test:

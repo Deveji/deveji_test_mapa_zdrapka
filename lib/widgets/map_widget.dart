@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:flutter_map_cancellable_tile_provider/flutter_map_cancellable_tile_provider.dart';
 import 'package:latlong2/latlong.dart';
 import '../services/geojson_service.dart';
 import '../constants/poland_coordinates.dart';
+import '../services/image_cache_service.dart';
+import 'optimized_map_image.dart';
 
 class MapWidget extends StatefulWidget {
   const MapWidget({super.key});
@@ -12,25 +13,57 @@ class MapWidget extends StatefulWidget {
   State<MapWidget> createState() => _MapWidgetState();
 }
 
-class _MapWidgetState extends State<MapWidget> {
+class _MapWidgetState extends State<MapWidget> with WidgetsBindingObserver {
   final mapController = MapController();
   final geoJsonService = GeoJsonService();
+  final imageCacheService = ImageCacheService();
   late Future<List<LatLng>> polandBorder;
-  late Future<List<List<LatLng>>> countyPolygons;
+  // Initialize with an empty future that resolves to an empty list
   String loadingStatus = 'Initializing...';
   final centerPoint = polandCenter;
+  bool _isImagePrecached = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _initializeGeoData();
+    _precacheMapImage();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // When app resumes from background, ensure the image is still cached
+    if (state == AppLifecycleState.resumed && !_isImagePrecached) {
+      _precacheMapImage();
+    }
+  }
+
+  Future<void> _precacheMapImage() async {
+    try {
+      setState(() => loadingStatus = 'Precaching map image...');
+      await imageCacheService.precacheAssetImage('lib/widgets/poland.webp');
+      if (mounted) {
+        setState(() {
+          _isImagePrecached = true;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error precaching map image: $e');
+    }
   }
 
   void _initializeGeoData() {
     try {
-      setState(() => loadingStatus = 'Loading Poland border...');
+      setState(() => loadingStatus = 'Loading Geo Data...');
       polandBorder = geoJsonService.extractPolygonPoints().catchError((e) {
-        print('Error loading Poland border: $e');
+        print('Error loading Geo Data: $e');
         throw e;
       });
 
@@ -46,7 +79,6 @@ class _MapWidgetState extends State<MapWidget> {
     return FutureBuilder<List<Object>>(
       future: Future.wait([
         polandBorder,
-        countyPolygons,
       ]),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
@@ -99,19 +131,17 @@ class _MapWidgetState extends State<MapWidget> {
                 //   userAgentPackageName: 'com.deveji.test.mapazdrapka',
                 //   tileProvider: CancellableNetworkTileProvider(),
                 // ),
-                OverlayImageLayer(
-                  overlayImages: [
-                    OverlayImage(
-                      bounds: LatLngBounds(
-                        LatLng(polandBounds.northEast.latitude + imageAdjustment.top, 
-                              polandBounds.northEast.longitude + imageAdjustment.right),
-                        LatLng(polandBounds.southWest.latitude - imageAdjustment.bottom, 
-                              polandBounds.southWest.longitude - imageAdjustment.left),
-                      ),
-                      opacity: 1,
-                      imageProvider: const AssetImage('lib/widgets/poland.webp'),
-                    ),
-                  ],
+
+                // Optimized map overlay with caching
+                OptimizedMapOverlay(
+                  imagePath: 'lib/widgets/poland.webp',
+                  bounds: LatLngBounds(
+                    LatLng(polandBounds.northEast.latitude + imageAdjustment.top, 
+                          polandBounds.northEast.longitude + imageAdjustment.right),
+                    LatLng(polandBounds.southWest.latitude - imageAdjustment.bottom, 
+                          polandBounds.southWest.longitude - imageAdjustment.left),
+                  ),
+                  opacity: 1,
                 ),
                 // Gray overlay for the rest of the world
                 // PolygonLayer(

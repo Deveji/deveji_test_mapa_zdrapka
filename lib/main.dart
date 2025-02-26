@@ -1,7 +1,14 @@
 import 'package:flutter/material.dart';
 import 'widgets/map_widget.dart';
+import 'services/image_cache_service.dart';
 
-void main() {
+void main() async {
+  // Ensure Flutter is initialized
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  // Initialize the image cache service and precache the large map image
+  final imageCacheService = ImageCacheService();
+  await imageCacheService.precacheAssetImage('lib/widgets/poland.webp');
   ErrorWidget.builder = (FlutterErrorDetails details) {
     return Material(
       child: Center(
