@@ -4,7 +4,7 @@ import 'package:latlong2/latlong.dart';
 import '../services/geojson_service.dart';
 import '../constants/poland_coordinates.dart';
 import '../services/image_cache_service.dart';
-import 'optimized_map_image.dart';
+import 'progressive_map_image.dart';
 
 class MapWidget extends StatefulWidget {
   const MapWidget({super.key});
@@ -18,7 +18,6 @@ class _MapWidgetState extends State<MapWidget> with WidgetsBindingObserver {
   final geoJsonService = GeoJsonService();
   final imageCacheService = ImageCacheService();
   late Future<List<LatLng>> polandBorder;
-  // Initialize with an empty future that resolves to an empty list
   String loadingStatus = 'Initializing...';
   final centerPoint = polandCenter;
   bool _isImagePrecached = false;
@@ -48,12 +47,18 @@ class _MapWidgetState extends State<MapWidget> with WidgetsBindingObserver {
   Future<void> _precacheMapImage() async {
     try {
       setState(() => loadingStatus = 'Precaching map image...');
-      await imageCacheService.precacheAssetImage('lib/widgets/poland.webp');
+      
+      // First precache the low-quality image
+      debugPrint('Precaching low-quality map image in MapWidget...');
+      await imageCacheService.precacheAssetImage('lib/widgets/poland.jpg');
+      
       if (mounted) {
         setState(() {
           _isImagePrecached = true;
         });
       }
+      
+      // The high-quality image will be loaded by the AdvancedProgressiveMapOverlay
     } catch (e) {
       debugPrint('Error precaching map image: $e');
     }
@@ -132,9 +137,10 @@ class _MapWidgetState extends State<MapWidget> with WidgetsBindingObserver {
                 //   tileProvider: CancellableNetworkTileProvider(),
                 // ),
 
-                // Optimized map overlay with caching
-                OptimizedMapOverlay(
-                  imagePath: 'lib/widgets/poland.webp',
+                // Progressive map overlay with low-quality image loading first
+                AdvancedProgressiveMapOverlay(
+                  lowQualityImagePath: 'lib/widgets/poland.jpg',
+                  highQualityImagePath: 'lib/widgets/poland.webp',
                   bounds: LatLngBounds(
                     LatLng(polandBounds.northEast.latitude + imageAdjustment.top, 
                           polandBounds.northEast.longitude + imageAdjustment.right),

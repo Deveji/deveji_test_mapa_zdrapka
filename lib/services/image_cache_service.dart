@@ -36,17 +36,20 @@ class ImageCacheService {
 
     try {
       // Load the asset as bytes
+      debugPrint('Loading asset bytes for: $assetPath');
       final ByteData data = await rootBundle.load(assetPath);
       final Uint8List bytes = data.buffer.asUint8List();
+      debugPrint('Loaded ${bytes.length} bytes for: $assetPath');
       
       // Decode the image
+      debugPrint('Decoding image: $assetPath');
       final ui.Codec codec = await ui.instantiateImageCodec(bytes);
       final ui.FrameInfo frameInfo = await codec.getNextFrame();
       
       // Store the image in our cache
       _imageCache[assetPath] = frameInfo.image;
       
-      debugPrint('Successfully cached image: $assetPath');
+      debugPrint('Successfully cached image: $assetPath (${frameInfo.image.width}x${frameInfo.image.height})');
     } catch (e) {
       debugPrint('Error precaching image $assetPath: $e');
       rethrow;
