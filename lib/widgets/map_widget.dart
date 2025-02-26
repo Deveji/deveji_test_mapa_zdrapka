@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -78,6 +79,37 @@ class _MapWidgetState extends State<MapWidget> with WidgetsBindingObserver {
       throw Exception('Failed to initialize map data: $e');
     }
   }
+  
+  // Calculate minimum zoom level based on screen height
+  double _calculateMinZoomForHeight(BuildContext context, LatLngBounds bounds) {
+    final screenHeight = MediaQuery.of(context).size.height;
+    final boundsHeight = bounds.north - bounds.south;
+    
+    // This is a simplified calculation - in a real app you might need to adjust this
+    // based on the specific projection and map characteristics
+    // The constant factor (0.0009) is an approximation that may need adjustment
+    return (screenHeight / (boundsHeight * 111000)) * 0.0009;
+  }
+  
+  // Calculate minimum zoom level based on screen width
+  double _calculateMinZoomForWidth(BuildContext context, LatLngBounds bounds) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final boundsWidth = bounds.east - bounds.west;
+    final latitudeFactor = math.cos(bounds.center.latitude * math.pi / 180);
+    
+    // Adjust for the fact that longitude degrees vary in distance based on latitude
+    // The constant factor (0.0009) is an approximation that may need adjustment
+    return (screenWidth / (boundsWidth * 111000 * latitudeFactor)) * 0.0009;
+  }
+  
+  // Handle map events to ensure constraints are enforced
+  void _handleMapEvent(MapEvent event) {
+    // If needed, we can add additional constraint logic here
+    if (event is MapEventMoveEnd) {
+      // Additional checks can be added here if needed
+      print('Map moved to: ${event.camera.center}, zoom: ${event.camera.zoom}');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -113,6 +145,39 @@ class _MapWidgetState extends State<MapWidget> with WidgetsBindingObserver {
 
         print('All data loaded successfully');
         final borderPoints = snapshot.data![0] as List<LatLng>;
+        
+        // Calculate the image overlay bounds with adjustments
+        final imageOverlayBounds = LatLngBounds(
+          LatLng(polandBounds.northEast.latitude + imageAdjustment.top, 
+                polandBounds.northEast.longitude + imageAdjustment.right),
+          LatLng(polandBounds.southWest.latitude - imageAdjustment.bottom, 
+                polandBounds.southWest.longitude - imageAdjustment.left),
+        );
+
+        // Get screen size to calculate appropriate min zoom
+        final screenSize = MediaQuery.of(context).size;
+        final screenAspectRatio = screenSize.width / screenSize.height;
+        
+        // Calculate the bounds aspect ratio
+        final boundsWidth = imageOverlayBounds.east - imageOverlayBounds.west;
+        final boundsHeight = imageOverlayBounds.north - imageOverlayBounds.south;
+        final boundsAspectRatio = boundsWidth / boundsHeight;
+        
+        // Calculate minimum zoom based on screen size and bounds
+        // This ensures the map always fills the viewport
+        double calculatedMinZoom = 5.6; // Default min zoom
+        
+        // Adjust min zoom based on which dimension is limiting
+        if (screenAspectRatio > boundsAspectRatio) {
+          // Height is the limiting factor
+          calculatedMinZoom = _calculateMinZoomForHeight(context, imageOverlayBounds);
+        } else {
+          // Width is the limiting factor
+          calculatedMinZoom = _calculateMinZoomForWidth(context, imageOverlayBounds);
+        }
+        
+        // Add a small buffer to ensure the image always fills the screen
+        calculatedMinZoom += 0.1;
 
         return Stack(
           children: [
@@ -120,15 +185,17 @@ class _MapWidgetState extends State<MapWidget> with WidgetsBindingObserver {
               mapController: mapController,
               options: MapOptions(
                 initialCenter: centerPoint,
-                initialZoom: 5.75,
-                minZoom: 5.6,
-                maxZoom: 30,
-                cameraConstraint: CameraConstraint.containCenter(
-                  bounds: polandBounds,
+                initialZoom: 7.1,
+                minZoom: calculatedMinZoom,
+                maxZoom: 11,
+                // Use contain instead of containCenter to ensure the entire viewport stays within bounds
+                cameraConstraint: CameraConstraint.contain(
+                  bounds: imageOverlayBounds,
                 ),
                 interactionOptions: const InteractionOptions(
                   flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
                 ),
+                onMapEvent: _handleMapEvent,
               ),
               children: [
                 // TileLayer(
