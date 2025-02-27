@@ -8,6 +8,11 @@ import '../services/image_cache_service.dart';
 import '../services/region_manager.dart';
 import '../models/region_data.dart';
 import 'progressive_map_image.dart';
+import 'map/layers/regions_layer.dart';
+import 'map/layers/region_labels_layer.dart';
+import 'map/layers/border_layer.dart';
+import 'map/utils/point_in_polygon_util.dart';
+import 'map/utils/map_calculation_helper.dart';
 
 class MapWidget extends StatefulWidget {
   const MapWidget({super.key});
@@ -25,6 +30,7 @@ class _MapWidgetState extends State<MapWidget> with WidgetsBindingObserver {
   String loadingStatus = 'Initializing...';
   final centerPoint = polandCenter;
   bool _isImagePrecached = false;
+  double _currentZoom = 7.1; // Track current zoom level
 
   @override
   void initState() {
@@ -92,33 +98,20 @@ class _MapWidgetState extends State<MapWidget> with WidgetsBindingObserver {
     }
   }
   
-  // Calculate minimum zoom level based on screen height
-  double _calculateMinZoomForHeight(BuildContext context, LatLngBounds bounds) {
-    final screenHeight = MediaQuery.of(context).size.height;
-    final boundsHeight = bounds.north - bounds.south;
-    
-    // This is a simplified calculation - in a real app you might need to adjust this
-    // based on the specific projection and map characteristics
-    // The constant factor (0.0009) is an approximation that may need adjustment
-    return (screenHeight / (boundsHeight * 111000)) * 0.0009;
-  }
-  
-  // Calculate minimum zoom level based on screen width
-  double _calculateMinZoomForWidth(BuildContext context, LatLngBounds bounds) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final boundsWidth = bounds.east - bounds.west;
-    final latitudeFactor = math.cos(bounds.center.latitude * math.pi / 180);
-    
-    // Adjust for the fact that longitude degrees vary in distance based on latitude
-    // The constant factor (0.0009) is an approximation that may need adjustment
-    return (screenWidth / (boundsWidth * 111000 * latitudeFactor)) * 0.0009;
-  }
+  // Map calculation methods moved to MapCalculationHelper class
   
   // Handle map events to ensure constraints are enforced
   void _handleMapEvent(MapEvent event) {
-    // If needed, we can add additional constraint logic here
+    // Update zoom level for any event that changes the camera
+    if (event.camera.zoom != _currentZoom) {
+      print('Zoom changed to: ${event.camera.zoom}');
+      setState(() {
+        _currentZoom = event.camera.zoom;
+      });
+    }
+    
+    // Additional logging for move end events
     if (event is MapEventMoveEnd) {
-      // Additional checks can be added here if needed
       print('Map moved to: ${event.camera.center}, zoom: ${event.camera.zoom}');
     }
   }
@@ -126,46 +119,22 @@ class _MapWidgetState extends State<MapWidget> with WidgetsBindingObserver {
   void _handleMapTap(LatLng point, List<RegionData> regions) {
     print('Map tapped at: $point');
     
-    // Find which region was tapped
-    bool regionFound = false;
-    for (var region in regions) {
-      if (_isPointInPolygon(point, region.points)) {
-        print('Region found: ${region.regionId}');
-        regionFound = true;
-        
-        // Select this region
-        regionManager.selectRegion(region.regionId);
-        
-        // Force UI update
-        if (mounted) {
-          setState(() {}); 
-        }
-        break;
-      }
-    }
+    // Find which region was tapped using the utility class
+    final tappedRegion = PointInPolygonUtil.findRegionAt(point, regions);
     
-    if (!regionFound) {
+    if (tappedRegion != null) {
+      print('Region found: ${tappedRegion.regionId}');
+      
+      // Select this region
+      regionManager.selectRegion(tappedRegion.regionId);
+      
+      // Force UI update
+      if (mounted) {
+        setState(() {}); 
+      }
+    } else {
       print('No region found at tap point');
     }
-  }
-  
-  bool _isPointInPolygon(LatLng point, List<LatLng> polygon) {
-    // Implementation of point-in-polygon algorithm
-    // This is a simple ray-casting algorithm
-    bool isInside = false;
-    int i = 0, j = polygon.length - 1;
-    
-    for (i = 0; i < polygon.length; i++) {
-      if ((polygon[i].latitude > point.latitude) != (polygon[j].latitude > point.latitude) &&
-          (point.longitude < (polygon[j].longitude - polygon[i].longitude) * 
-          (point.latitude - polygon[i].latitude) / 
-          (polygon[j].latitude - polygon[i].latitude) + polygon[i].longitude)) {
-        isInside = !isInside;
-      }
-      j = i;
-    }
-    
-    return isInside;
   }
 
   @override
@@ -212,30 +181,8 @@ class _MapWidgetState extends State<MapWidget> with WidgetsBindingObserver {
                 polandBounds.southWest.longitude - imageAdjustment.left),
         );
 
-        // Get screen size to calculate appropriate min zoom
-        final screenSize = MediaQuery.of(context).size;
-        final screenAspectRatio = screenSize.width / screenSize.height;
-        
-        // Calculate the bounds aspect ratio
-        final boundsWidth = imageOverlayBounds.east - imageOverlayBounds.west;
-        final boundsHeight = imageOverlayBounds.north - imageOverlayBounds.south;
-        final boundsAspectRatio = boundsWidth / boundsHeight;
-        
-        // Calculate minimum zoom based on screen size and bounds
-        // This ensures the map always fills the viewport
-        double calculatedMinZoom = 5.6; // Default min zoom
-        
-        // Adjust min zoom based on which dimension is limiting
-        if (screenAspectRatio > boundsAspectRatio) {
-          // Height is the limiting factor
-          calculatedMinZoom = _calculateMinZoomForHeight(context, imageOverlayBounds);
-        } else {
-          // Width is the limiting factor
-          calculatedMinZoom = _calculateMinZoomForWidth(context, imageOverlayBounds);
-        }
-        
-        // Add a small buffer to ensure the image always fills the screen
-        calculatedMinZoom += 0.1;
+        // Calculate minimum zoom using the helper class
+        final calculatedMinZoom = MapCalculationHelper.calculateMinZoom(context, imageOverlayBounds);
 
         return Stack(
           children: [
@@ -293,51 +240,17 @@ class _MapWidgetState extends State<MapWidget> with WidgetsBindingObserver {
                 //     ),
                 //   ],
                 // ),
-                // Region polygons with gray color
-                PolygonLayer(
-                  polygons: regions.map((region) => Polygon(
-                    points: region.points,
-                    color: region.isSelected 
-                        ? Colors.transparent
-                        : Colors.grey,
-                    borderColor: region.isSelected 
-                        ? Colors.transparent
-                        : Colors.brown.withOpacity(0.7),
-                    borderStrokeWidth: 3,
-                    isFilled: true,
-                  )).toList(),
-                ),
+                // Region polygons layer
+                RegionsLayer(regions: regions),
                 
-                // Text labels for regions
-                MarkerLayer(
-                  markers: regions.map((region) => Marker(
-                    point: region.center,
-                    width: 80,
-                    height: 30,
-                    child: Center(
-                      child: Text(
-                        region.regionId,
-                        style: const TextStyle(
-                          color: Colors.black,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                  )).toList(),
+                // Text labels for regions with zoom-based scaling
+                RegionLabelsLayer(
+                  regions: regions,
+                  zoomLevel: _currentZoom, // Use tracked zoom level
                 ),
                 
                 // Brown overlay for Poland border
-                PolygonLayer(
-                  polygons: [
-                    Polygon(
-                      points: borderPoints,
-                      color: Colors.transparent,
-                      borderStrokeWidth: 4.0,
-                      borderColor: const Color.fromRGBO(77, 63, 50, 1.0),
-                    ),
-                  ],
-                ),
+                BorderLayer(borderPoints: borderPoints),
               ],
             ),
             Positioned(
