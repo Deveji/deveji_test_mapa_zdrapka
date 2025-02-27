@@ -5,6 +5,8 @@ import 'package:latlong2/latlong.dart';
 import '../services/geojson_service.dart';
 import '../constants/poland_coordinates.dart';
 import '../services/image_cache_service.dart';
+import '../services/region_manager.dart';
+import '../models/region_data.dart';
 import 'progressive_map_image.dart';
 
 class MapWidget extends StatefulWidget {
@@ -17,8 +19,9 @@ class MapWidget extends StatefulWidget {
 class _MapWidgetState extends State<MapWidget> with WidgetsBindingObserver {
   final mapController = MapController();
   final geoJsonService = GeoJsonService();
+  final regionManager = RegionManager();
   final imageCacheService = ImageCacheService();
-  late Future<List<LatLng>> polandBorder;
+  late Future<List<Object>> mapData;
   String loadingStatus = 'Initializing...';
   final centerPoint = polandCenter;
   bool _isImagePrecached = false;
@@ -68,7 +71,16 @@ class _MapWidgetState extends State<MapWidget> with WidgetsBindingObserver {
   void _initializeGeoData() {
     try {
       setState(() => loadingStatus = 'Loading Geo Data...');
-      polandBorder = geoJsonService.extractPolygonPoints().catchError((e) {
+      
+      // Load both Poland border and regions
+      mapData = Future.wait([
+        geoJsonService.extractPolygonPoints(),
+        geoJsonService.extractRegions(),
+      ]).then((results) {
+        // Store regions in the RegionManager
+        regionManager.setRegions(results[1] as List<RegionData>);
+        return results;
+      }).catchError((e) {
         print('Error loading Geo Data: $e');
         throw e;
       });
@@ -110,13 +122,56 @@ class _MapWidgetState extends State<MapWidget> with WidgetsBindingObserver {
       print('Map moved to: ${event.camera.center}, zoom: ${event.camera.zoom}');
     }
   }
+  
+  void _handleMapTap(LatLng point, List<RegionData> regions) {
+    print('Map tapped at: $point');
+    
+    // Find which region was tapped
+    bool regionFound = false;
+    for (var region in regions) {
+      if (_isPointInPolygon(point, region.points)) {
+        print('Region found: ${region.regionId}');
+        regionFound = true;
+        
+        // Select this region
+        regionManager.selectRegion(region.regionId);
+        
+        // Force UI update
+        if (mounted) {
+          setState(() {}); 
+        }
+        break;
+      }
+    }
+    
+    if (!regionFound) {
+      print('No region found at tap point');
+    }
+  }
+  
+  bool _isPointInPolygon(LatLng point, List<LatLng> polygon) {
+    // Implementation of point-in-polygon algorithm
+    // This is a simple ray-casting algorithm
+    bool isInside = false;
+    int i = 0, j = polygon.length - 1;
+    
+    for (i = 0; i < polygon.length; i++) {
+      if ((polygon[i].latitude > point.latitude) != (polygon[j].latitude > point.latitude) &&
+          (point.longitude < (polygon[j].longitude - polygon[i].longitude) * 
+          (point.latitude - polygon[i].latitude) / 
+          (polygon[j].latitude - polygon[i].latitude) + polygon[i].longitude)) {
+        isInside = !isInside;
+      }
+      j = i;
+    }
+    
+    return isInside;
+  }
 
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<List<Object>>(
-      future: Future.wait([
-        polandBorder,
-      ]),
+      future: mapData,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return Center(
@@ -145,6 +200,9 @@ class _MapWidgetState extends State<MapWidget> with WidgetsBindingObserver {
 
         print('All data loaded successfully');
         final borderPoints = snapshot.data![0] as List<LatLng>;
+        
+        // Get regions from RegionManager to ensure we have the latest selection state
+        final regions = regionManager.regions.toList();
         
         // Calculate the image overlay bounds with adjustments
         final imageOverlayBounds = LatLngBounds(
@@ -188,14 +246,17 @@ class _MapWidgetState extends State<MapWidget> with WidgetsBindingObserver {
                 initialZoom: 7.1,
                 minZoom: calculatedMinZoom,
                 maxZoom: 11,
-                // Use contain instead of containCenter to ensure the entire viewport stays within bounds
-                cameraConstraint: CameraConstraint.contain(
+                // Use a more flexible camera constraint to handle the regions
+                cameraConstraint: CameraConstraint.containCenter(
                   bounds: imageOverlayBounds,
                 ),
                 interactionOptions: const InteractionOptions(
                   flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
                 ),
                 onMapEvent: _handleMapEvent,
+                onTap: (tapPosition, point) {
+                  _handleMapTap(point, regions);
+                },
               ),
               children: [
                 // TileLayer(
@@ -232,6 +293,40 @@ class _MapWidgetState extends State<MapWidget> with WidgetsBindingObserver {
                 //     ),
                 //   ],
                 // ),
+                // Region polygons with gray color
+                PolygonLayer(
+                  polygons: regions.map((region) => Polygon(
+                    points: region.points,
+                    color: region.isSelected 
+                        ? Colors.transparent
+                        : Colors.grey,
+                    borderColor: region.isSelected 
+                        ? Colors.transparent
+                        : Colors.brown.withOpacity(0.7),
+                    borderStrokeWidth: 3,
+                    isFilled: true,
+                  )).toList(),
+                ),
+                
+                // Text labels for regions
+                MarkerLayer(
+                  markers: regions.map((region) => Marker(
+                    point: region.center,
+                    width: 80,
+                    height: 30,
+                    child: Center(
+                      child: Text(
+                        region.regionId,
+                        style: const TextStyle(
+                          color: Colors.black,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  )).toList(),
+                ),
+                
                 // Brown overlay for Poland border
                 PolygonLayer(
                   polygons: [

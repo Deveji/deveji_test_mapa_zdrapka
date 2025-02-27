@@ -67,6 +67,7 @@ flutter:
     - lib/widgets/poland.webp
     - lib/widgets/poland.jpg
     - lib/constants/poland.geo.json
+    - lib/constants/ulozone_rejony_with_random_ids.geojson
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
