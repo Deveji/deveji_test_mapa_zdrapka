@@ -128,12 +128,17 @@ class _MapWidgetState extends State<MapWidget> with WidgetsBindingObserver {
       // Select this region
       regionManager.selectRegion(tappedRegion.regionId);
       
-      // Force UI update
-      if (mounted) {
-        setState(() {}); 
-      }
+      // Clear hover state
+      regionManager.setHoverRegion(null);
+      
+      // Force UI update to ensure selection is visible immediately
+      setState(() {});
     } else {
       print('No region found at tap point');
+      
+      // Clear selection and hover
+      regionManager.clearSelection();
+      regionManager.setHoverRegion(null);
     }
   }
 
@@ -194,7 +199,7 @@ class _MapWidgetState extends State<MapWidget> with WidgetsBindingObserver {
                 minZoom: calculatedMinZoom,
                 maxZoom: 11,
                 // Use a more flexible camera constraint to handle the regions
-                cameraConstraint: CameraConstraint.containCenter(
+                cameraConstraint: CameraConstraint.contain(
                   bounds: imageOverlayBounds,
                 ),
                 interactionOptions: const InteractionOptions(
@@ -241,7 +246,7 @@ class _MapWidgetState extends State<MapWidget> with WidgetsBindingObserver {
                 //   ],
                 // ),
                 // Region polygons layer
-                RegionsLayer(regions: regions),
+                RegionsLayer(regionManager: regionManager),
                 
                 // Text labels for regions with zoom-based scaling
                 RegionLabelsLayer(

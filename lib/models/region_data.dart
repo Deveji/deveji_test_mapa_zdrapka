@@ -1,5 +1,8 @@
 import 'package:latlong2/latlong.dart';
 
+// Define a type for the hit value
+typedef RegionHitValue = ({String regionId, String subtitle});
+
 class RegionData {
   final String regionId;
   final List<LatLng> points;
@@ -38,6 +41,14 @@ class RegionData {
       maxLat: maxLat,
       minLng: minLng,
       maxLng: maxLng,
+    );
+  }
+  
+  // Convert to hit value for PolygonLayer
+  RegionHitValue toHitValue() {
+    return (
+      regionId: regionId,
+      subtitle: 'Region ID: $regionId',
     );
   }
   
