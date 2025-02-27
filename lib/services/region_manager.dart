@@ -104,16 +104,15 @@ class RegionManager extends ChangeNotifier {
       
       return Polygon(
         points: region.points,
-        color: region.isSelected 
-            ? Colors.blue.withOpacity(0.3)
-            : Colors.grey.withOpacity(0.5),
+        color: region.isSelected
+            ? Colors.transparent
+            : Colors.grey,
         borderColor: isHovered
             ? Colors.blue
             : region.isSelected
-                ? Colors.blue.withOpacity(0.7)
-                : Colors.brown.withOpacity(0.7),
+                ? Colors.transparent
+                : Colors.brown,
         borderStrokeWidth: isHovered || region.isSelected ? 3.0 : 1.0,
-        isFilled: true,
       );
     }).toList();
   }

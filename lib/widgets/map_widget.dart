@@ -198,7 +198,7 @@ class _MapWidgetState extends State<MapWidget> with WidgetsBindingObserver {
                 initialZoom: 7.1,
                 minZoom: calculatedMinZoom,
                 maxZoom: 11,
-                // Use a more flexible camera constraint to handle the regions
+                // Configure map bounds
                 cameraConstraint: CameraConstraint.contain(
                   bounds: imageOverlayBounds,
                 ),
@@ -206,8 +206,13 @@ class _MapWidgetState extends State<MapWidget> with WidgetsBindingObserver {
                   flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
                 ),
                 onMapEvent: _handleMapEvent,
-                onTap: (tapPosition, point) {
-                  _handleMapTap(point, regions);
+                onTap: (tapPosition, point) => _handleMapTap(point, regions),
+                // Handle hover through taps for now
+                onSecondaryTap: (tapPosition, point) {
+                  if (mounted) {
+                    final hoveredRegion = PointInPolygonUtil.findRegionAt(point, regions);
+                    regionManager.setHoverRegion(hoveredRegion?.regionId);
+                  }
                 },
               ),
               children: [
