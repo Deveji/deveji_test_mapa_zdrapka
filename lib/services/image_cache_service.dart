@@ -4,22 +4,90 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+/// Represents a cached image with metadata
+class _CachedImage {
+  final ui.Image image;
+  final DateTime timestamp;
+  final int sizeInBytes;
+
+  _CachedImage({
+    required this.image,
+    required this.timestamp,
+    required this.sizeInBytes,
+  });
+}
+
 /// A service for caching and managing large images to improve loading performance
 /// and prevent reloading during UI rerenders.
 class ImageCacheService {
   // Singleton pattern
   static final ImageCacheService _instance = ImageCacheService._internal();
   factory ImageCacheService() => _instance;
-  ImageCacheService._internal();
+  ImageCacheService._internal() {
+    initCleanupTimer();
+  }
 
-  // Cache for storing loaded images
-  final Map<String, ui.Image> _imageCache = {};
+  // Cache for storing loaded images with timestamps
+  final Map<String, _CachedImage> _imageCache = {};
+  
+  // Cache configuration
+  static const int _maxCacheSize = 100 * 1024 * 1024; // 100MB limit
+  static const Duration _maxCacheAge = Duration(hours: 1);
+  
+  // Current cache size in bytes
+  int _currentCacheSize = 0;
   
   // Flag to track if precaching is in progress
   bool _isPrecaching = false;
 
-  /// Precaches the specified asset image to memory.
-  /// Returns a Future that completes when the image is loaded.
+  // Timer for periodic cache cleanup
+  Timer? _cleanupTimer;
+
+  // Initialize cleanup timer
+  void initCleanupTimer() {
+    _cleanupTimer?.cancel();
+    _cleanupTimer = Timer.periodic(const Duration(minutes: 15), (_) {
+      _performCacheCleanup();
+    });
+  }
+
+  void dispose() {
+    _cleanupTimer?.cancel();
+    clearCache();
+  }
+
+  /// Performs periodic cache cleanup based on age and size limits
+  void _performCacheCleanup() {
+    final now = DateTime.now();
+    
+    // Remove expired entries
+    _imageCache.removeWhere((key, cachedImage) {
+      if (now.difference(cachedImage.timestamp) > _maxCacheAge) {
+        _currentCacheSize -= cachedImage.sizeInBytes;
+        return true;
+      }
+      return false;
+    });
+
+    // If still over size limit, remove oldest entries
+    if (_currentCacheSize > _maxCacheSize) {
+      final entries = _imageCache.entries.toList()
+        ..sort((a, b) => a.value.timestamp.compareTo(b.value.timestamp));
+      
+      for (final entry in entries) {
+        if (_currentCacheSize <= _maxCacheSize) break;
+        _currentCacheSize -= entry.value.sizeInBytes;
+        _imageCache.remove(entry.key);
+      }
+    }
+  }
+
+  /// Estimates the size of an image in bytes
+  int _estimateImageSize(ui.Image image) {
+    // Assuming 4 bytes per pixel (RGBA)
+    return image.width * image.height * 4;
+  }
+
   Future<void> precacheAssetImage(String assetPath) async {
     if (_imageCache.containsKey(assetPath)) {
       debugPrint('Image $assetPath already cached');
@@ -46,10 +114,23 @@ class ImageCacheService {
       final ui.Codec codec = await ui.instantiateImageCodec(bytes);
       final ui.FrameInfo frameInfo = await codec.getNextFrame();
       
+      final image = frameInfo.image;
+      final imageSize = _estimateImageSize(image);
+
+      // Check if adding this image would exceed cache size limit
+      if (_currentCacheSize + imageSize > _maxCacheSize) {
+        _performCacheCleanup();
+      }
+
       // Store the image in our cache
-      _imageCache[assetPath] = frameInfo.image;
+      _imageCache[assetPath] = _CachedImage(
+        image: image,
+        timestamp: DateTime.now(),
+        sizeInBytes: imageSize,
+      );
+      _currentCacheSize += imageSize;
       
-      debugPrint('Successfully cached image: $assetPath (${frameInfo.image.width}x${frameInfo.image.height})');
+      debugPrint('Successfully cached image: $assetPath (${image.width}x${image.height})');
     } catch (e) {
       debugPrint('Error precaching image $assetPath: $e');
       rethrow;
@@ -61,198 +142,40 @@ class ImageCacheService {
   /// Gets a cached image. If the image is not in the cache, it will be loaded.
   /// Returns a Future that completes with the loaded image.
   Future<ui.Image> getCachedImage(String assetPath) async {
-    if (_imageCache.containsKey(assetPath)) {
-      return _imageCache[assetPath]!;
+    final cachedImage = _imageCache[assetPath];
+    if (cachedImage != null) {
+      // Update timestamp to mark as recently used
+      _imageCache[assetPath] = _CachedImage(
+        image: cachedImage.image,
+        timestamp: DateTime.now(),
+        sizeInBytes: cachedImage.sizeInBytes,
+      );
+      return cachedImage.image;
     }
     
     await precacheAssetImage(assetPath);
-    return _imageCache[assetPath]!;
+    return _imageCache[assetPath]!.image;
   }
 
   /// Checks if an image is already cached.
   bool isImageCached(String assetPath) {
-    return _imageCache.containsKey(assetPath);
+    if (!_imageCache.containsKey(assetPath)) return false;
+    
+    // Check if the cached image has expired
+    final cachedImage = _imageCache[assetPath]!;
+    if (DateTime.now().difference(cachedImage.timestamp) > _maxCacheAge) {
+      _currentCacheSize -= cachedImage.sizeInBytes;
+      _imageCache.remove(assetPath);
+      return false;
+    }
+    
+    return true;
   }
 
   /// Clears the image cache.
   void clearCache() {
     _imageCache.clear();
+    _currentCacheSize = 0;
     debugPrint('Image cache cleared');
-  }
-}
-
-/// A custom image provider that uses the ImageCacheService to load and cache images.
-/// This prevents the image from being reloaded during UI rerenders.
-class CachedAssetImage extends ImageProvider<CachedAssetImage> {
-  final String assetPath;
-  // final ImageCacheService _cacheService = ImageCacheService();
-
-  CachedAssetImage(this.assetPath);
-
-  @override
-  Future<CachedAssetImage> obtainKey(ImageConfiguration configuration) {
-    return SynchronousFuture<CachedAssetImage>(this);
-  }
-
-  @override
-  ImageStreamCompleter loadImage(CachedAssetImage key, ImageDecoderCallback decode) {
-    final StreamController<ImageChunkEvent> chunkEvents = StreamController<ImageChunkEvent>();
-    
-    return MultiFrameImageStreamCompleter(
-      codec: _loadAsync(key, chunkEvents, decode),
-      chunkEvents: chunkEvents.stream,
-      scale: 1.0,
-      debugLabel: assetPath,
-      informationCollector: () sync* {
-        yield ErrorDescription('Asset: $assetPath');
-      },
-    );
-  }
-
-  Future<ui.Codec> _loadAsync(
-    CachedAssetImage key,
-    StreamController<ImageChunkEvent> chunkEvents,
-    ImageDecoderCallback decode,
-  ) async {
-    try {
-      // Use the cache service to get or load the image
-      // final ui.Image image = await _cacheService.getCachedImage(assetPath);
-      
-      // Convert the ui.Image to a Codec that can be used by the ImageProvider
-      final ui.ImmutableBuffer buffer = await ui.ImmutableBuffer.fromUint8List(
-        Uint8List.fromList([]), // Empty list as we already have the image
-      );
-      
-      // We need to create a codec from the image
-      // This is a workaround as we can't directly create a codec from a ui.Image
-      final ui.Codec codec = await decode(buffer);
-      
-      chunkEvents.close();
-      return codec;
-    } catch (e) {
-      chunkEvents.close();
-      debugPrint('Error loading image $assetPath: $e');
-      rethrow;
-    }
-  }
-
-  @override
-  bool operator ==(Object other) {
-    if (other.runtimeType != runtimeType) return false;
-    return other is CachedAssetImage && other.assetPath == assetPath;
-  }
-
-  @override
-  int get hashCode => assetPath.hashCode;
-
-  @override
-  String toString() => '${objectRuntimeType(this, 'CachedAssetImage')}("$assetPath")';
-}
-
-/// A custom widget that displays a cached asset image with a loading indicator.
-class CachedAssetImageWidget extends StatefulWidget {
-  final String assetPath;
-  final BoxFit fit;
-  final double? width;
-  final double? height;
-  final Widget? placeholder;
-  final Widget? errorWidget;
-
-  const CachedAssetImageWidget({
-    super.key,
-    required this.assetPath,
-    this.fit = BoxFit.cover,
-    this.width,
-    this.height,
-    this.placeholder,
-    this.errorWidget,
-  });
-
-  @override
-  State<CachedAssetImageWidget> createState() => _CachedAssetImageWidgetState();
-}
-
-class _CachedAssetImageWidgetState extends State<CachedAssetImageWidget> {
-  final ImageCacheService _cacheService = ImageCacheService();
-  bool _isLoading = true;
-  bool _hasError = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadImage();
-  }
-
-  Future<void> _loadImage() async {
-    if (_cacheService.isImageCached(widget.assetPath)) {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
-      return;
-    }
-
-    try {
-      await _cacheService.precacheAssetImage(widget.assetPath);
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      debugPrint('Error loading image: $e');
-      if (mounted) {
-        setState(() {
-          _hasError = true;
-          _isLoading = false;
-        });
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_isLoading) {
-      return widget.placeholder ?? 
-        SizedBox(
-          width: widget.width,
-          height: widget.height,
-          child: const Center(
-            child: CircularProgressIndicator(),
-          ),
-        );
-    }
-
-    if (_hasError) {
-      return widget.errorWidget ?? 
-        SizedBox(
-          width: widget.width,
-          height: widget.height,
-          child: const Center(
-            child: Icon(Icons.error, color: Colors.red),
-          ),
-        );
-    }
-
-    return Image(
-      image: AssetImage(widget.assetPath),
-      fit: widget.fit,
-      width: widget.width,
-      height: widget.height,
-      frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
-        if (wasSynchronouslyLoaded || frame != null) {
-          return child;
-        }
-        return widget.placeholder ?? 
-          SizedBox(
-            width: widget.width,
-            height: widget.height,
-            child: const Center(
-              child: CircularProgressIndicator(),
-            ),
-          );
-      },
-    );
   }
 }
