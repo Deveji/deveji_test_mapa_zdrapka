@@ -1,4 +1,4 @@
-import 'dart:math' as math;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -11,7 +11,6 @@ import 'progressive_map_image.dart';
 import 'map/layers/regions_layer.dart';
 import 'map/layers/region_labels_layer.dart';
 import 'map/layers/border_layer.dart';
-import 'map/utils/point_in_polygon_util.dart';
 import 'map/utils/map_calculation_helper.dart';
 
 class MapWidget extends StatefulWidget {
@@ -31,6 +30,10 @@ class _MapWidgetState extends State<MapWidget> with WidgetsBindingObserver {
   final centerPoint = polandCenter;
   bool _isImagePrecached = false;
   double _currentZoom = 7.1; // Track current zoom level
+  
+  // Advanced hover and tap detection
+  final LayerHitNotifier<RegionHitValue> _hitNotifier = ValueNotifier(null);
+  List<RegionHitValue>? _prevHitValues;
 
   @override
   void initState() {
@@ -38,10 +41,36 @@ class _MapWidgetState extends State<MapWidget> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _initializeGeoData();
     _precacheMapImage();
+    
+    // Add listener to the hit notifier to update hover state
+    _hitNotifier.addListener(_updateHoverState);
+  }
+  
+  void _updateHoverState() {
+    final hitValues = _hitNotifier.value?.hitValues.toList();
+    
+    // Debug logging
+    print('Hit values: $hitValues');
+    print('Previous hit values: $_prevHitValues');
+    print('Hit coordinate: ${_hitNotifier.value?.coordinate}');
+    
+    // Skip if the hit values haven't changed
+    if (listEquals(hitValues, _prevHitValues)) return;
+    _prevHitValues = hitValues;
+    
+    // Update hover state in region manager
+    if (hitValues != null && hitValues.isNotEmpty) {
+      print('Setting hover region: ${hitValues.first.regionId}');
+      regionManager.setHoverRegion(hitValues.first.regionId);
+    } else {
+      print('Clearing hover region');
+      regionManager.setHoverRegion(null);
+    }
   }
 
   @override
   void dispose() {
+    _hitNotifier.removeListener(_updateHoverState);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -116,30 +145,59 @@ class _MapWidgetState extends State<MapWidget> with WidgetsBindingObserver {
     }
   }
   
-  void _handleMapTap(LatLng point, List<RegionData> regions) {
-    print('Map tapped at: $point');
-    
-    // Find which region was tapped using the utility class
-    final tappedRegion = PointInPolygonUtil.findRegionAt(point, regions);
-    
-    if (tappedRegion != null) {
-      print('Region found: ${tappedRegion.regionId}');
-      
-      // Select this region
-      regionManager.selectRegion(tappedRegion.regionId);
-      
-      // Clear hover state
-      regionManager.setHoverRegion(null);
-      
-      // Force UI update to ensure selection is visible immediately
-      setState(() {});
-    } else {
-      print('No region found at tap point');
-      
-      // Clear selection and hover
-      regionManager.clearSelection();
-      regionManager.setHoverRegion(null);
-    }
+  
+  // Show a modal bottom sheet with region information
+  void _showRegionInfoModal(
+    String eventType,
+    List<RegionHitValue> hitRegions,
+    LatLng coords,
+  ) {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (context) => Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Region Information',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            Text(
+              '$eventType at point: (${coords.latitude.toStringAsFixed(6)}, ${coords.longitude.toStringAsFixed(6)})',
+            ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: ListView.builder(
+                itemBuilder: (context, index) {
+                  final regionData = hitRegions[index];
+                  return ListTile(
+                    leading: index == 0
+                        ? const Icon(Icons.location_on)
+                        : const SizedBox.shrink(),
+                    title: Text('Region: ${regionData.regionId}'),
+                    subtitle: Text(regionData.subtitle),
+                    dense: true,
+                  );
+                },
+                itemCount: hitRegions.length,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.bottomCenter,
+              child: SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Close'),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -206,52 +264,100 @@ class _MapWidgetState extends State<MapWidget> with WidgetsBindingObserver {
                   flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
                 ),
                 onMapEvent: _handleMapEvent,
-                onTap: (tapPosition, point) => _handleMapTap(point, regions),
-                // Handle hover through taps for now
-                onSecondaryTap: (tapPosition, point) {
-                  if (mounted) {
-                    final hoveredRegion = PointInPolygonUtil.findRegionAt(point, regions);
-                    regionManager.setHoverRegion(hoveredRegion?.regionId);
+                // Add direct hover detection as a fallback
+                onPointerHover: (event, point) {
+                  print('Direct hover detected at: $point');
+                  // This is a fallback in case the hit notifier doesn't work
+                  bool foundRegion = false;
+                  for (var region in regions) {
+                    if (region.containsPointInBoundingBox(point)) {
+                      print('Direct hover: region in bounding box: ${region.regionId}');
+                      regionManager.setHoverRegion(region.regionId);
+                      foundRegion = true;
+                      break;
+                    }
+                  }
+                  
+                  // If no region was found, clear the hover state
+                  if (!foundRegion) {
+                    print('Direct hover: no region found, clearing hover state');
+                    regionManager.setHoverRegion(null);
+                  }
+                },
+                // Add direct tap detection as a fallback
+                onTap: (tapPosition, point) {
+                  print('Direct tap detected at: $point');
+                  // This is a fallback in case the hit notifier doesn't work
+                  for (var region in regions) {
+                    if (region.containsPointInBoundingBox(point)) {
+                      print('Direct tap: region in bounding box: ${region.regionId}');
+                      regionManager.selectRegion(region.regionId);
+                      _showRegionInfoModal('Tapped', [region.toHitValue()], point);
+                      break;
+                    }
                   }
                 },
               ),
               children: [
-                // TileLayer(
-                //   urlTemplate: 'https://api.maptiler.com/maps/toner-v2/{z}/{x}/{y}.png?key=RYwixx4ca4fsMuVl1xme',
-                //   userAgentPackageName: 'com.deveji.test.mapazdrapka',
-                //   tileProvider: CancellableNetworkTileProvider(),
-                // ),
-
                 // Progressive map overlay with low-quality image loading first
                 AdvancedProgressiveMapOverlay(
                   lowQualityImagePath: 'lib/widgets/poland.jpg',
                   highQualityImagePath: 'lib/widgets/poland.webp',
                   bounds: LatLngBounds(
-                    LatLng(polandBounds.northEast.latitude + imageAdjustment.top, 
+                    LatLng(polandBounds.northEast.latitude + imageAdjustment.top,
                           polandBounds.northEast.longitude + imageAdjustment.right),
-                    LatLng(polandBounds.southWest.latitude - imageAdjustment.bottom, 
+                    LatLng(polandBounds.southWest.latitude - imageAdjustment.bottom,
                           polandBounds.southWest.longitude - imageAdjustment.left),
                   ),
                   opacity: 1,
                 ),
-                // Gray overlay for the rest of the world
-                // PolygonLayer(
-                //   polygons: [
-                //     Polygon(
-                //       points: const [
-                //         LatLng(85, -180),  // Top-left of the world
-                //         LatLng(85, 180),   // Top-right of the world
-                //         LatLng(-85, 180),  // Bottom-right of the world
-                //         LatLng(-85, -180), // Bottom-left of the world
-                //       ],
-                //       color: const Color.fromRGBO(208, 194, 183, 1.0),
-                //       holePointsList: [borderPoints],
-                //       isFilled: true,
-                //     ),
-                //   ],
-                // ),
-                // Region polygons layer
-                RegionsLayer(regionManager: regionManager),
+                
+                // Enhanced mouse interaction with MouseRegion and GestureDetector
+                MouseRegion(
+                  hitTestBehavior: HitTestBehavior.deferToChild,
+                  cursor: SystemMouseCursors.click,
+                  child: GestureDetector(
+                    onTap: () {
+                      if (_hitNotifier.value != null && _hitNotifier.value!.hitValues.isNotEmpty) {
+                        final hitValues = _hitNotifier.value!.hitValues;
+                        final point = _hitNotifier.value!.coordinate;
+                        
+                        // Select the region
+                        if (hitValues.isNotEmpty) {
+                          regionManager.selectRegion(hitValues.first.regionId);
+                        }
+                        
+                        // Show modal with region information
+                        _showRegionInfoModal('Tapped', hitValues, point);
+                      } else {
+                        // Clear selection if tapped outside any region
+                        regionManager.clearSelection();
+                      }
+                    },
+                    onLongPress: () {
+                      if (_hitNotifier.value != null && _hitNotifier.value!.hitValues.isNotEmpty) {
+                        _showRegionInfoModal(
+                          'Long pressed',
+                          _hitNotifier.value!.hitValues,
+                          _hitNotifier.value!.coordinate,
+                        );
+                      }
+                    },
+                    onSecondaryTap: () {
+                      if (_hitNotifier.value != null && _hitNotifier.value!.hitValues.isNotEmpty) {
+                        _showRegionInfoModal(
+                          'Secondary tapped',
+                          _hitNotifier.value!.hitValues,
+                          _hitNotifier.value!.coordinate,
+                        );
+                      }
+                    },
+                    child: RegionsLayer(
+                      regionManager: regionManager,
+                      hitNotifier: _hitNotifier,
+                    ),
+                  ),
+                ),
                 
                 // Text labels for regions with zoom-based scaling
                 RegionLabelsLayer(
@@ -263,6 +369,69 @@ class _MapWidgetState extends State<MapWidget> with WidgetsBindingObserver {
                 BorderLayer(borderPoints: borderPoints),
               ],
             ),
+            // Enhanced hover feedback overlay with animation
+            Positioned(
+              top: 16,
+              right: 16,
+              child: ValueListenableBuilder<String?>(
+                valueListenable: regionManager.hoverRegionId,
+                builder: (context, hoverId, child) {
+                  if (hoverId == null) return const SizedBox.shrink();
+                  
+                  final region = regionManager.regions.firstWhere(
+                    (r) => r.regionId == hoverId,
+                    orElse: () => regionManager.regions.first,
+                  );
+
+                  return AnimatedOpacity(
+                    duration: const Duration(milliseconds: 150),
+                    opacity: 1.0,
+                    child: Card(
+                      key: ValueKey(hoverId),
+                      color: Colors.white.withOpacity(0.9),
+                      elevation: 4,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          border: Border.all(
+                            color: Colors.blue.withOpacity(0.3),
+                            width: 2,
+                          ),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'Region: ${region.regionId}',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                                color: Colors.black87,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Tap for more details',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.black54,
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+            // Center button
             Positioned(
               right: 16,
               bottom: 16,

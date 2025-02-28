@@ -1,13 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import '../../../services/region_manager.dart';
+import '../../../models/region_data.dart';
+
+typedef RegionHit = ({String regionId, String name});
 
 class RegionsLayer extends StatefulWidget {
   final RegionManager regionManager;
+  final LayerHitNotifier<RegionHitValue>? hitNotifier;
   
   const RegionsLayer({
     super.key,
     required this.regionManager,
+    this.hitNotifier,
   });
 
   @override
@@ -40,8 +45,17 @@ class _RegionsLayerState extends State<RegionsLayer> {
       valueListenable: widget.regionManager.hoverRegionId,
       builder: (context, hoverRegionId, child) {
         return RepaintBoundary(
-          child: PolygonLayer(
-            polygons: widget.regionManager.getPolygons(),
+          child: ValueListenableBuilder<String?>(
+            valueListenable: widget.regionManager.hoverRegionId,
+            builder: (context, hoverValue, child) {
+              final polygons = widget.regionManager.getAllPolygons();
+              
+              // Use the polygons directly since they now have hit values
+              return PolygonLayer(
+                polygons: polygons,
+                hitNotifier: widget.hitNotifier,
+              );
+            },
           ),
         );
       },
