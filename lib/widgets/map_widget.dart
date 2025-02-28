@@ -12,6 +12,7 @@ import 'map/layers/regions_layer.dart';
 import 'map/layers/region_labels_layer.dart';
 import 'map/layers/border_layer.dart';
 import 'map/utils/map_calculation_helper.dart';
+import 'map/modals/region_info_modal.dart';
 
 class MapWidget extends StatefulWidget {
   const MapWidget({super.key});
@@ -144,61 +145,6 @@ class _MapWidgetState extends State<MapWidget> with WidgetsBindingObserver {
       print('Map moved to: ${event.camera.center}, zoom: ${event.camera.zoom}');
     }
   }
-  
-  
-  // Show a modal bottom sheet with region information
-  void _showRegionInfoModal(
-    String eventType,
-    List<RegionHitValue> hitRegions,
-    LatLng coords,
-  ) {
-    showModalBottomSheet<void>(
-      context: context,
-      builder: (context) => Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Region Information',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            Text(
-              '$eventType at point: (${coords.latitude.toStringAsFixed(6)}, ${coords.longitude.toStringAsFixed(6)})',
-            ),
-            const SizedBox(height: 8),
-            Expanded(
-              child: ListView.builder(
-                itemBuilder: (context, index) {
-                  final regionData = hitRegions[index];
-                  return ListTile(
-                    leading: index == 0
-                        ? const Icon(Icons.location_on)
-                        : const SizedBox.shrink(),
-                    title: Text('Region: ${regionData.regionId}'),
-                    subtitle: Text(regionData.subtitle),
-                    dense: true,
-                  );
-                },
-                itemCount: hitRegions.length,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.bottomCenter,
-              child: SizedBox(
-                width: double.infinity,
-                child: OutlinedButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('Close'),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -292,7 +238,7 @@ class _MapWidgetState extends State<MapWidget> with WidgetsBindingObserver {
                     if (region.containsPointInBoundingBox(point)) {
                       print('Direct tap: region in bounding box: ${region.regionId}');
                       regionManager.selectRegion(region.regionId);
-                      _showRegionInfoModal('Tapped', [region.toHitValue()], point);
+                      showRegionInfoModal(context, 'Tapped', [region.toHitValue()], point);
                       break;
                     }
                   }
@@ -328,7 +274,7 @@ class _MapWidgetState extends State<MapWidget> with WidgetsBindingObserver {
                         }
                         
                         // Show modal with region information
-                        _showRegionInfoModal('Tapped', hitValues, point);
+                        showRegionInfoModal(context, 'Tapped', hitValues, point);
                       } else {
                         // Clear selection if tapped outside any region
                         regionManager.clearSelection();
@@ -336,7 +282,8 @@ class _MapWidgetState extends State<MapWidget> with WidgetsBindingObserver {
                     },
                     onLongPress: () {
                       if (_hitNotifier.value != null && _hitNotifier.value!.hitValues.isNotEmpty) {
-                        _showRegionInfoModal(
+                        showRegionInfoModal(
+                          context,
                           'Long pressed',
                           _hitNotifier.value!.hitValues,
                           _hitNotifier.value!.coordinate,
@@ -345,7 +292,8 @@ class _MapWidgetState extends State<MapWidget> with WidgetsBindingObserver {
                     },
                     onSecondaryTap: () {
                       if (_hitNotifier.value != null && _hitNotifier.value!.hitValues.isNotEmpty) {
-                        _showRegionInfoModal(
+                        showRegionInfoModal(
+                          context,
                           'Secondary tapped',
                           _hitNotifier.value!.hitValues,
                           _hitNotifier.value!.coordinate,
