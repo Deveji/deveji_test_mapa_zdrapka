@@ -30,7 +30,7 @@ class _MapWidgetState extends State<MapWidget> with WidgetsBindingObserver {
   String loadingStatus = 'Initializing...';
   final centerPoint = polandCenter;
   bool _isImagePrecached = false;
-  double _currentZoom = 7.1; // Track current zoom level
+  double _currentZoom = 9; // Track current zoom level
   
   // Advanced hover and tap detection
   final LayerHitNotifier<RegionHitValue> _hitNotifier = ValueNotifier(null);

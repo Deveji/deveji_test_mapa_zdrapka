@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:flutter_map/flutter_map.dart';
-import '../../../models/region_data.dart';
 
 /// Shows a modal bottom sheet with region information
 void showRegionInfoModal(

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'widgets/map_widget.dart';
 import 'services/image_cache_service.dart';
-import 'package:flutter/services.dart';
 
 void main() async {
   // Ensure Flutter is initialized

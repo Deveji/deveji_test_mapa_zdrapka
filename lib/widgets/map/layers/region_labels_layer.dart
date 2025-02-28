@@ -1,9 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
 import '../../../models/region_data.dart';
-import '../../../services/region_manager.dart';
-import '../utils/map_calculation_helper.dart';
 
 class RegionLabelsLayer extends StatelessWidget {
   final List<RegionData> regions;

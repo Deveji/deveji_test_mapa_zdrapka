@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
 import '../services/image_cache_service.dart';
 
 /// A widget that implements progressive image loading for map overlays.
@@ -14,13 +13,13 @@ class ProgressiveMapImage extends StatefulWidget {
   final Duration fadeInDuration;
 
   const ProgressiveMapImage({
-    Key? key,
+    super.key,
     required this.lowQualityImagePath,
     required this.highQualityImagePath,
     required this.bounds,
     this.opacity = 1.0,
     this.fadeInDuration = const Duration(milliseconds: 500),
-  }) : super(key: key);
+  });
 
   @override
   State<ProgressiveMapImage> createState() => _ProgressiveMapImageState();
@@ -161,12 +160,12 @@ class ProgressiveMapOverlay extends StatefulWidget {
   final double opacity;
 
   const ProgressiveMapOverlay({
-    Key? key,
+    super.key,
     required this.lowQualityImagePath,
     required this.highQualityImagePath,
     required this.bounds,
     this.opacity = 1.0,
-  }) : super(key: key);
+  });
 
   @override
   State<ProgressiveMapOverlay> createState() => _ProgressiveMapOverlayState();
@@ -196,12 +195,12 @@ class AdvancedProgressiveMapOverlay extends StatefulWidget {
   final double opacity;
 
   const AdvancedProgressiveMapOverlay({
-    Key? key,
+    super.key,
     required this.lowQualityImagePath,
     required this.highQualityImagePath,
     required this.bounds,
     this.opacity = 1.0,
-  }) : super(key: key);
+  });
 
   @override
   State<AdvancedProgressiveMapOverlay> createState() => _AdvancedProgressiveMapOverlayState();
