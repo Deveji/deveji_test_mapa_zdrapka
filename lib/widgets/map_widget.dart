@@ -3,11 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../services/geojson_service.dart';
-import '../constants/poland_coordinates.dart';
+import '../constants/config.dart';
 import '../services/image_cache_service.dart';
 import '../services/region_manager.dart';
 import '../models/region_data.dart';
-import 'progressive_map_image.dart';
+import 'map/utils/progressive_map_image.dart';
 import 'map/layers/regions_layer.dart';
 import 'map/layers/region_labels_layer.dart';
 import 'map/layers/border_layer.dart';
@@ -377,17 +377,6 @@ class _MapWidgetState extends State<MapWidget> with WidgetsBindingObserver {
                     ),
                   );
                 },
-              ),
-            ),
-            // Center button
-            Positioned(
-              right: 16,
-              bottom: 16,
-              child: FloatingActionButton(
-                onPressed: () {
-                  mapController.move(centerPoint, 5.75);
-                },
-                child: const Icon(Icons.center_focus_strong),
               ),
             ),
           ],

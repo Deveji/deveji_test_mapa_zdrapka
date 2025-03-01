@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
-import '../services/image_cache_service.dart';
+import '../../../services/image_cache_service.dart';
 
 /// A widget that implements progressive image loading for map overlays.
 /// It first displays a low-quality image and then transitions to a high-quality image
