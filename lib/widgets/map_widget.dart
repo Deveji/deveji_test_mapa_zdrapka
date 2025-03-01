@@ -90,7 +90,7 @@ class _MapWidgetState extends State<MapWidget> with WidgetsBindingObserver {
       
       // First precache the low-quality image
       debugPrint('Precaching low-quality map image in MapWidget...');
-      await imageCacheService.precacheAssetImage('lib/widgets/poland.jpg');
+      await imageCacheService.precacheAssetImage('assets/images/poland.jpg');
       
       if (mounted) {
         setState(() {
@@ -247,8 +247,8 @@ class _MapWidgetState extends State<MapWidget> with WidgetsBindingObserver {
               children: [
                 // Progressive map overlay with low-quality image loading first
                 AdvancedProgressiveMapOverlay(
-                  lowQualityImagePath: 'lib/widgets/poland.jpg',
-                  highQualityImagePath: 'lib/widgets/poland.webp',
+                  lowQualityImagePath: 'assets/images/poland.jpg',
+                  highQualityImagePath: 'assets/images/poland.webp',
                   bounds: LatLngBounds(
                     LatLng(polandBounds.northEast.latitude + imageAdjustment.top,
                           polandBounds.northEast.longitude + imageAdjustment.right),

@@ -123,7 +123,7 @@ class ServiceLocator {
       'logging': _isInitialized,
       'errorHandling': _isInitialized,
       'mapState': _isInitialized && _mapStateService.regions.isNotEmpty,
-      'imageCache': _isInitialized && _imageCacheService.isImageCached('lib/widgets/poland.jpg'),
+      'imageCache': _isInitialized && _imageCacheService.isImageCached('assets/images/poland.jpg'),
       'geoJson': _isInitialized,
     };
   }

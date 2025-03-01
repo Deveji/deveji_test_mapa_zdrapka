@@ -22,7 +22,7 @@ void main() async {
     services.logging.info('Initializing map data...');
     
     // Precache the low-quality image (fast loading)
-    await services.imageCache.precacheAssetImage('lib/widgets/poland.jpg');
+    await services.imageCache.precacheAssetImage('assets/images/poland.jpg');
     services.logging.info('Low-quality map image precached');
     
     // Configure global error widget

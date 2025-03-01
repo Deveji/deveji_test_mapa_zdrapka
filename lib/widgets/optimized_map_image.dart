@@ -166,7 +166,7 @@ class _OptimizedMapOverlayState extends State<OptimizedMapOverlay> {
           opacity: widget.opacity,
           imageProvider: _isInitialized 
             ? AssetImage(widget.imagePath)
-            : const AssetImage('lib/widgets/poland.webp'), // Use the same image but it will be cached
+            : const AssetImage('assets/images/poland.webp'), // Use the same image but it will be cached
         ),
       ],
     );

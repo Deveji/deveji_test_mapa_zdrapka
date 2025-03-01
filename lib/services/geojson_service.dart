@@ -26,7 +26,7 @@ class GeoJsonService {
     try {
       if (_polandGeoJson == null) {
         debugPrint('Loading poland.geo.json...');
-        final String jsonString = await rootBundle.loadString('lib/constants/poland.geo.json');
+        final String jsonString = await rootBundle.loadString('assets/geojson/poland.geo.json');
         debugPrint('Parsing poland.geo.json...');
         _polandGeoJson = json.decode(jsonString);
       }
@@ -111,7 +111,7 @@ class GeoJsonService {
     try {
       if (_regionsGeoJson == null) {
         debugPrint('Loading ulozone_rejony_with_random_ids.geojson...');
-        final String jsonString = await rootBundle.loadString('lib/constants/ulozone_rejony_with_random_ids.geojson');
+        final String jsonString = await rootBundle.loadString('assets/geojson/ulozone_rejony_with_random_ids.geojson');
         
         debugPrint('Parsing ulozone_rejony_with_random_ids.geojson...');
         _regionsGeoJson = json.decode(jsonString);
