@@ -2,11 +2,16 @@ import 'dart:collection';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import '../models/region_data.dart';
+import 'scratch_storage_service.dart';
 
 class RegionManager extends ChangeNotifier {
   static final RegionManager _instance = RegionManager._internal();
   factory RegionManager() => _instance;
-  RegionManager._internal();
+  RegionManager._internal() {
+    _loadScratchedRegions();
+  }
+
+  final _scratchStorage = ScratchStorageService();
 
   List<RegionData> _regions = [];
   String? _selectedRegionId;
@@ -31,14 +36,27 @@ class RegionManager extends ChangeNotifier {
     }
   }
 
+  Future<void> _loadScratchedRegions() async {
+    await _scratchStorage.init();
+    final scratchedIds = _scratchStorage.getScratched();
+    
+    for (var i = 0; i < _regions.length; i++) {
+      if (scratchedIds.contains(_regions[i].regionId)) {
+        _regions[i] = _regions[i].copyWith(isScratched: true);
+      }
+    }
+    notifyListeners();
+  }
+
   // Set the list of regions
   void setRegions(List<RegionData> regions) {
     _regions = List.from(regions);
     _selectedRegionId = null;
+    _loadScratchedRegions(); // Load scratched state after setting regions
   }
 
   // Scratch a region by its ID
-  void scratchRegion(String regionId) {
+  Future<void> scratchRegion(String regionId) async {
     print('RegionManager: Scratching region $regionId');
     
     bool found = false;
@@ -63,21 +81,12 @@ class RegionManager extends ChangeNotifier {
     
     if (!found) {
       print('RegionManager: Region $regionId not found in regions list');
+    } else {
+      // Save to persistent storage
+      await _scratchStorage.saveScratched(regionId);
     }
     
     notifyListeners();
-  }
-  
-  // Scratch a region with immediate visual update
-  void scratchRegionWithImmediateUpdate(String regionId) {
-    // First scratch the region
-    scratchRegion(regionId);
-    
-    // Then force an additional notification to ensure all listeners update
-    // This helps overcome any caching mechanisms in the UI
-    Future.microtask(() {
-      notifyListeners();
-    });
   }
 
   // Select a region by its ID

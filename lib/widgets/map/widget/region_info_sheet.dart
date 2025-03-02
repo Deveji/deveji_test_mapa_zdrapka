@@ -127,11 +127,13 @@ class _RegionInfoBottomSheetState extends State<RegionInfoBottomSheet> {
                                 onPressed: region.isScratched 
                                   ? null 
                                   : () {
-                                      // Use the immediate update method
-                                      regionManager.scratchRegionWithImmediateUpdate(regionId);
-                                      
-                                      // Update this widget's state
-                                      setState(() {});
+                                      // Use the async scratch method
+                                      regionManager.scratchRegion(regionId).then((_) {
+                                        // Update this widget's state after scratching
+                                        if (mounted) {
+                                          setState(() {});
+                                        }
+                                      });
                                     },
                                 icon: const Icon(Icons.brush),
                                 label: Text(region.isScratched ? 'Scratched' : 'Scratch'),
