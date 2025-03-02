@@ -11,17 +11,34 @@ class _CachedPolygonData {
   final List<Polygon<RegionHitValue>> polygons;
   final String? hoverId;
   final String? selectedId;
+  final List<String> scratchedIds;
   final double timestamp;
 
   _CachedPolygonData({
     required this.polygons,
     required this.hoverId,
     required this.selectedId,
+    required this.scratchedIds,
     required this.timestamp,
   });
 
-  bool isStale(String? currentHoverId, String? currentSelectedId) {
-    return hoverId != currentHoverId || selectedId != currentSelectedId;
+  bool isStale(String? currentHoverId, String? currentSelectedId, List<String> currentScratchedIds) {
+    if (hoverId != currentHoverId || selectedId != currentSelectedId) {
+      return true;
+    }
+    
+    // Check if scratched regions have changed
+    if (scratchedIds.length != currentScratchedIds.length) {
+      return true;
+    }
+    
+    for (final id in currentScratchedIds) {
+      if (!scratchedIds.contains(id)) {
+        return true;
+      }
+    }
+    
+    return false;
   }
 
   bool isExpired() {
@@ -80,9 +97,22 @@ class _RegionsLayerState extends State<RegionsLayer> {
     final currentHoverId = widget.regionManager.hoverRegionId.value;
     final selectedRegion = widget.regionManager.selectedRegion;
     
+    // Get all scratched region IDs
+    final scratchedIds = widget.regionManager.regions
+        .where((region) => region.isScratched)
+        .map((region) => region.regionId)
+        .toList();
+    
+    // Always consider cache stale if we have scratched regions
+    // This ensures immediate updates when scratching
+    if (scratchedIds.isNotEmpty) {
+      return true;
+    }
+    
     return _cachedData!.isStale(
       currentHoverId,
       selectedRegion?.regionId,
+      scratchedIds,
     ) || _cachedData!.isExpired();
   }
 
@@ -90,12 +120,19 @@ class _RegionsLayerState extends State<RegionsLayer> {
     final currentHoverId = widget.regionManager.hoverRegionId.value;
     final selectedRegion = widget.regionManager.selectedRegion;
     
+    // Get all scratched region IDs
+    final scratchedIds = widget.regionManager.regions
+        .where((region) => region.isScratched)
+        .map((region) => region.regionId)
+        .toList();
+    
     // Create new cached data
     final polygons = widget.regionManager.getAllPolygons();
     _cachedData = _CachedPolygonData(
       polygons: polygons,
       hoverId: currentHoverId,
       selectedId: selectedRegion?.regionId,
+      scratchedIds: scratchedIds,
       timestamp: DateTime.now().millisecondsSinceEpoch.toDouble(),
     );
     

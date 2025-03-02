@@ -8,6 +8,7 @@ class RegionData {
   final List<LatLng> points;
   final LatLng center;
   bool isSelected;
+  bool isScratched;
   
   // Cached bounding box for performance
   final double minLat;
@@ -20,6 +21,7 @@ class RegionData {
     required this.points,
     required this.center,
     this.isSelected = false,
+    this.isScratched = false,
     double? minLat,
     double? maxLat,
     double? minLng,
@@ -30,12 +32,13 @@ class RegionData {
        maxLng = maxLng ?? _calculateMaxLng(points);
 
   // Create a copy of this RegionData with updated selection state
-  RegionData copyWith({bool? isSelected}) {
+  RegionData copyWith({bool? isSelected, bool? isScratched}) {
     return RegionData(
       regionId: regionId,
       points: points,
       center: center,
       isSelected: isSelected ?? this.isSelected,
+      isScratched: isScratched ?? this.isScratched,
       // Pass the existing bounding box values to avoid recalculation
       minLat: minLat,
       maxLat: maxLat,

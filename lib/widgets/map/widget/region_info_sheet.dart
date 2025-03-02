@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
+import '../../../services/region_manager.dart';
 
 const double maxBottomSheetHeight = 0.5; // Max height 50% of screen
 const double minBottomSheetHeight = 0.1; // Min height 10% of screen
@@ -112,15 +113,47 @@ class _RegionInfoBottomSheetState extends State<RegionInfoBottomSheet> {
                               fontWeight: FontWeight.bold,
                             ),
                       ),
-                      if (widget.onClose != null)
-                        IconButton(
-                          icon: const Icon(Icons.close),
-                          onPressed: widget.onClose,
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
-                          iconSize: 20,
-                          splashRadius: 20,
-                        ),
+                      Row(
+                        children: [
+                          Builder(
+                            builder: (context) {
+                              final regionManager = RegionManager();
+                              final regionId = widget.hitRegions!.first.regionId;
+                              final region = regionManager.regions.firstWhere(
+                                (r) => r.regionId == regionId,
+                              );
+                              
+                              return TextButton.icon(
+                                onPressed: region.isScratched 
+                                  ? null 
+                                  : () {
+                                      // Use the immediate update method
+                                      regionManager.scratchRegionWithImmediateUpdate(regionId);
+                                      
+                                      // Update this widget's state
+                                      setState(() {});
+                                    },
+                                icon: const Icon(Icons.brush),
+                                label: Text(region.isScratched ? 'Scratched' : 'Scratch'),
+                                style: TextButton.styleFrom(
+                                  foregroundColor: Colors.grey[800],
+                                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                                ),
+                              );
+                            }
+                          ),
+                          const SizedBox(width: 8),
+                          if (widget.onClose != null)
+                            IconButton(
+                              icon: const Icon(Icons.close),
+                              onPressed: widget.onClose,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                              iconSize: 20,
+                              splashRadius: 20,
+                            ),
+                        ],
+                      ),
                     ],
                   ),
                 ),

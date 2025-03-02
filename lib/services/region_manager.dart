@@ -37,6 +37,49 @@ class RegionManager extends ChangeNotifier {
     _selectedRegionId = null;
   }
 
+  // Scratch a region by its ID
+  void scratchRegion(String regionId) {
+    print('RegionManager: Scratching region $regionId');
+    
+    bool found = false;
+    for (var i = 0; i < _regions.length; i++) {
+      if (_regions[i].regionId == regionId) {
+        print('RegionManager: Found region to scratch: $regionId');
+        // Set scratched but maintain selection state
+        _regions[i] = _regions[i].copyWith(
+          isScratched: true,
+          isSelected: _regions[i].isSelected, // Maintain current selection state
+        );
+        
+        // Clear hover effects if this region is being hovered
+        if (hoverRegionId.value == regionId) {
+          _hoverPolygons = null;
+        }
+        
+        found = true;
+        break;
+      }
+    }
+    
+    if (!found) {
+      print('RegionManager: Region $regionId not found in regions list');
+    }
+    
+    notifyListeners();
+  }
+  
+  // Scratch a region with immediate visual update
+  void scratchRegionWithImmediateUpdate(String regionId) {
+    // First scratch the region
+    scratchRegion(regionId);
+    
+    // Then force an additional notification to ensure all listeners update
+    // This helps overcome any caching mechanisms in the UI
+    Future.microtask(() {
+      notifyListeners();
+    });
+  }
+
   // Select a region by its ID
   void selectRegion(String regionId) {
     print('RegionManager: Selecting region $regionId');
@@ -112,14 +155,16 @@ class RegionManager extends ChangeNotifier {
       
       if (hoveredRegion != null) {
         print('Creating hover polygon for region: ${hoveredRegion.regionId}');
-        _hoverPolygons = [
-          Polygon(
-            points: hoveredRegion.points,
-            color: Colors.red.withOpacity(0.4),  // More visible hover color
-            borderColor: Colors.red,  // Bright red border
-            borderStrokeWidth: 6.0,  // Much thicker border
-          ),
-        ];
+        if (!hoveredRegion.isScratched) {
+          _hoverPolygons = [
+            Polygon(
+              points: hoveredRegion.points,
+              color: Colors.grey[300]!,  // light gray for hover
+              borderColor: Colors.brown.withOpacity(0.5),  // default border
+              borderStrokeWidth: 1.5,  // default border width
+            ),
+          ];
+        }
       } else {
         print('Hovered region not found: $regionId');
         _hoverPolygons = null;
@@ -145,21 +190,21 @@ class RegionManager extends ChangeNotifier {
       
       return Polygon(
         points: region.points,
-        color: isHovered
-            ? Colors.red.withOpacity(0.5)  // Much more visible hover color
-            : isSelected
-                ? Colors.green.withOpacity(0.3)  // More visible selection color
-                : Colors.grey,
-        borderColor: isHovered
-            ? Colors.red  // Bright red for hover
-            : isSelected
-                ? Colors.green  // Solid green for selection
-                : Colors.brown.withOpacity(0.5),
-        borderStrokeWidth: isHovered
-            ? 8.0  // Much thicker border for hover
-            : isSelected
-                ? 6.0  // Thicker border for selection
-                : 1.5,
+        // Always transparent if scratched, regardless of hover/selection state
+        color: region.isScratched
+            ? Colors.transparent
+            : isHovered
+                ? Colors.grey[300]!  // light gray for hover
+                : isSelected
+                    ? Colors.grey[300]!  // light gray for selection
+                    : Colors.grey,  // default gray
+        // Maintain selection border even when scratched
+        borderColor: isSelected
+            ? Colors.grey[800]!  // dark border for selection
+            : Colors.brown.withOpacity(0.5),  // default border
+        borderStrokeWidth: isSelected
+            ? 6.0  // Thicker border for selection
+            : 1.5,  // default border width
         hitValue: (
           regionId: region.regionId,
           subtitle: 'Region ID: ${region.regionId}',
