@@ -212,7 +212,7 @@ class RegionManager extends ChangeNotifier {
             ? Colors.grey[800]!  // dark border for selection
             : Colors.brown.withOpacity(0.5),  // default border
         borderStrokeWidth: isSelected
-            ? 6.0  // Thicker border for selection
+            ? 3.0  // Thicker border for selection
             : 1.5,  // default border width
         hitValue: (
           regionId: region.regionId,

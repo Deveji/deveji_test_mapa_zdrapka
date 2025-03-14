@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 import '../../../services/region_manager.dart';
 
-const double maxBottomSheetHeight = 0.5; // Max height 50% of screen
+const double maxBottomSheetHeight = 1; // Max height 50% of screen
 const double minBottomSheetHeight = 0.1; // Min height 10% of screen
+const double defaultBottomSheetHeight = 0.35; // Default height 35% of screen
 
 class RegionInfoBottomSheet extends StatefulWidget {
   final String? eventType;
@@ -46,7 +47,7 @@ class _RegionInfoBottomSheetState extends State<RegionInfoBottomSheet> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (_controller.isAttached) {
           _controller.animateTo(
-            minBottomSheetHeight,
+            defaultBottomSheetHeight,
             duration: const Duration(milliseconds: 300),
             curve: Curves.easeInOut,
           );
@@ -75,12 +76,12 @@ class _RegionInfoBottomSheetState extends State<RegionInfoBottomSheet> {
 
     return DraggableScrollableSheet(
       controller: _controller,
-      initialChildSize: minBottomSheetHeight,
+      initialChildSize: defaultBottomSheetHeight,
       minChildSize: 0,
       shouldCloseOnMinExtent: true,
       maxChildSize: maxBottomSheetHeight,
       snap: true,
-      snapSizes: const [maxBottomSheetHeight],
+      snapSizes: const [defaultBottomSheetHeight, maxBottomSheetHeight],
       builder: (BuildContext context, ScrollController scrollController) {
         _scrollController = scrollController;
         return Container(
@@ -183,7 +184,7 @@ class _RegionInfoBottomSheetState extends State<RegionInfoBottomSheet> {
                               ),
                               label: Text(
                                 region.isScratched
-                                    ? 'Zdrapany'
+                                    ? 'Region Zdrapany'
                                     : 'Zdrap Region',
                                 style: const TextStyle(
                                   fontSize: 15,

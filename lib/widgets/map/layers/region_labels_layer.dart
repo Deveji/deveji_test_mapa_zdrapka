@@ -75,7 +75,7 @@ class _RegionLabelsLayerState extends State<RegionLabelsLayer> {
     // Measure text size for collision detection
     final textPainter = TextPainter(
       text: TextSpan(text: region.regionId, style: style),
-      maxLines: 1,
+      // maxLines: 1,
       textDirection: TextDirection.ltr,
     )..layout();
 
@@ -123,12 +123,12 @@ class _RegionLabelsLayerState extends State<RegionLabelsLayer> {
           Marker(
             point: region.center,
             width: labelSize.width + 10, // Add padding
-            height: labelSize.height + 5,
+            height: labelSize.height + 15,
             child: Center(
               child: AnimatedDefaultTextStyle(
                 duration: const Duration(milliseconds: 150),
                 style: labelStyle.style,
-                child: Text(region.regionId),
+                child: Text(region.regionId.replaceAll(' ', '\n')),
               ),
             ),
           ),
